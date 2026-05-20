@@ -314,31 +314,9 @@ class VideoClipper:
         max_chars = self.max_chars
         print(f"  Using max_chars={max_chars} for {orientation} mode")
         
-        # Load ASR model
-        self._load_asr_model()
-        
-        # Check if audio needs segmentation
-        duration = self.get_audio_duration(audio_path)
-        
-        if duration > self.segment_duration:
-            # Split and process segments
-            with tempfile.TemporaryDirectory() as tmpdir:
-                segments = self.split_audio(audio_path, tmpdir)
-                all_segments = []
-                
-                for seg_path, offset, _ in segments:
-                    seg_results = self._transcribe_with_vad(
-                        seg_path,
-                        time_offset=offset,
-                        max_chars=max_chars,
-                        source_lang=source_lang,
-                    )
-                    all_segments.extend(seg_results)
-                
-                return all_segments
-        else:
-            # Process entire file
-            return self._transcribe_with_vad(audio_path, max_chars=max_chars, source_lang=source_lang)
+        # The ASR helper owns model lifetimes: VAD, ASR, and aligner are loaded
+        # and released as separate phases to keep peak memory low.
+        return self._transcribe_with_vad(audio_path, max_chars=max_chars, source_lang=source_lang)
     
     def _transcribe_with_vad(
         self,
@@ -641,7 +619,12 @@ class VideoClipper:
                 self.extract_audio(video_path, audio_path)
 
                 # Step 2: Transcribe audio (ASR model loaded on demand)
-                segments = self.transcribe_audio(audio_path, orientation=orientation, source_lang=source_lang)
+                try:
+                    segments = self.transcribe_audio(audio_path, orientation=orientation, source_lang=source_lang)
+                finally:
+                    # ASR/aligner are only needed for transcription. Release them
+                    # before correction, chunking, translation, highlights, or render work.
+                    self._unload_asr_model()
 
                 # Save transcription in new metadata-wrapped format
                 transcript_data = {
@@ -693,9 +676,6 @@ class VideoClipper:
                         f.write("\n")
                 results["txt"] = txt_path
                 print(f"💾 Plain text saved to {txt_path}")
-            
-            # Unload ASR model after transcription
-            self._unload_asr_model()
 
             if render_with_highlights:
                 # Step 3: Split transcript into <=5-min chunks and analyze each with Gemini

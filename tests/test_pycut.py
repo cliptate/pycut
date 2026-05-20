@@ -200,6 +200,282 @@ def test_video_clipper_delegates_asr_loading_to_helper(monkeypatch):
     assert seen["load_models"] is True
 
 
+def test_transcribe_audio_runs_vad_on_full_audio_before_transcript_chunking(monkeypatch):
+    """Long audio should not be pre-split before VAD/ASR/alignment."""
+    import pycut.clipper as clipper_module
+    from pycut.utils import Segment
+
+    clipper = clipper_module.VideoClipper.__new__(clipper_module.VideoClipper)
+    clipper.max_chars = 30
+    clipper.segment_duration = 300
+
+    calls = []
+
+    def fake_split_audio(*args, **kwargs):
+        raise AssertionError("audio should not be split before VAD/ASR")
+
+    def fake_transcribe_with_vad(audio_path, time_offset=0.0, max_chars=60, source_lang="en"):
+        calls.append(
+            {
+                "audio_path": audio_path,
+                "time_offset": time_offset,
+                "max_chars": max_chars,
+                "source_lang": source_lang,
+            }
+        )
+        return [Segment(start=1.0, end=2.0, text="hello", words=[])]
+
+    monkeypatch.setattr(clipper, "_load_asr_model", lambda: None)
+    monkeypatch.setattr(clipper, "get_audio_duration", lambda _: 600.0)
+    monkeypatch.setattr(clipper, "split_audio", fake_split_audio)
+    monkeypatch.setattr(clipper, "_transcribe_with_vad", fake_transcribe_with_vad)
+
+    segments = clipper.transcribe_audio("full.wav", orientation="landscape", source_lang="zh")
+
+    assert segments == [Segment(start=1.0, end=2.0, text="hello", words=[])]
+    assert calls == [
+        {
+            "audio_path": "full.wav",
+            "time_offset": 0.0,
+            "max_chars": 30,
+            "source_lang": "zh",
+        }
+    ]
+
+
+def test_process_video_unloads_asr_before_correction_and_postprocessing(monkeypatch, tmp_path):
+    """ASR should be released before LLM correction and transcript chunk consumers."""
+    import pycut.clipper as clipper_module
+    from pycut.utils import Segment
+
+    clipper = clipper_module.VideoClipper.__new__(clipper_module.VideoClipper)
+    clipper.segment_duration = 300
+    clipper.filter_fillers = True
+
+    events = []
+    raw_segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
+    corrected_segments = [Segment(start=0.0, end=1.0, text="hello corrected", words=[])]
+
+    monkeypatch.setattr(clipper, "extract_audio", lambda video_path, output_path: events.append("extract"))
+
+    def fake_transcribe(audio_path, orientation="landscape", source_lang="en"):
+        events.append("transcribe")
+        return raw_segments
+
+    def fake_unload():
+        events.append("unload")
+
+    def fake_correct(segments, source_lang):
+        events.append("correct")
+        return corrected_segments
+
+    def fake_filter(segments, filter_empty_segments=True):
+        events.append("filter")
+        return list(segments)
+
+    monkeypatch.setattr(clipper, "transcribe_audio", fake_transcribe)
+    monkeypatch.setattr(clipper, "_unload_asr_model", fake_unload)
+    monkeypatch.setattr(clipper, "_correct_transcript", fake_correct)
+    monkeypatch.setattr(clipper, "_filter_subtitle_segments", fake_filter)
+
+    result = clipper.process_video(
+        "demo.mp4",
+        str(tmp_path),
+        output_formats=["json"],
+        correct_words=True,
+        margin_left=0.0,
+        margin_right=0.0,
+    )
+
+    assert events == ["extract", "transcribe", "unload", "correct", "filter"]
+    assert result == {"transcript": str(tmp_path / "demo_transcript.json")}
+
+
+def test_mlx_asr_helper_unload_releases_asr_aligner_and_vad():
+    """Unload should release every model used by VAD+ASR transcription."""
+    import pycut.asr as asr
+
+    helper = asr.MLXASRHelper(
+        asr_model_path="fake-asr",
+        aligner_model_path="fake-aligner",
+        filter_fillers=True,
+        enable_align=True,
+    )
+    helper.asr_model = object()
+    helper._mlx_aligner = object()
+    helper.vad_model = object()
+
+    helper.unload_models()
+
+    assert helper.asr_model is None
+    assert helper._mlx_aligner is None
+    assert helper.vad_model is None
+
+
+def test_mlx_asr_helper_transcribe_audio_loads_one_mlx_model_at_a_time(monkeypatch):
+    """ASR should be released before the aligner is loaded."""
+    import pycut.asr as asr
+
+    events = []
+
+    class FakeASRModel:
+        def generate(self, audio_path, language="en"):
+            events.append("asr_generate")
+            return types.SimpleNamespace(text="hello world")
+
+    class FakeAligner:
+        def generate(self, audio_path, text, language="en"):
+            events.append("align_generate")
+            return [
+                types.SimpleNamespace(text="hello", start_time=0.0, end_time=0.5),
+                types.SimpleNamespace(text="world", start_time=0.5, end_time=1.0),
+            ]
+
+    def fake_load(model_name):
+        events.append(f"load:{model_name}")
+        if model_name == "fake-asr":
+            return FakeASRModel()
+        if model_name == "fake-aligner":
+            return FakeAligner()
+        raise AssertionError(model_name)
+
+    monkeypatch.setattr(asr, "load_mlx_stt_model", fake_load)
+
+    helper = asr.MLXASRHelper(
+        asr_model_path="fake-asr",
+        aligner_model_path="fake-aligner",
+        filter_fillers=True,
+        enable_align=True,
+    )
+
+    segments = helper.transcribe_audio("fake.wav", get_audio_duration=lambda _: 1.0)
+
+    assert [seg.text for seg in segments] == ["hello world"]
+    assert helper.asr_model is None
+    assert helper._mlx_aligner is None
+    assert events == [
+        "load:fake-asr",
+        "asr_generate",
+        "load:fake-aligner",
+        "align_generate",
+    ]
+
+
+def test_transcribe_with_vad_batches_each_model_phase_sequentially(monkeypatch):
+    """VAD, ASR, and aligner should run as separate load/process/unload phases."""
+    import numpy as np
+    import pycut.asr as asr
+
+    events = []
+
+    class FakeTensor:
+        def __init__(self, data):
+            self.data = data
+
+        def __getitem__(self, key):
+            return FakeTensor(self.data[key])
+
+        def numpy(self):
+            return self.data
+
+    fake_torch = types.SimpleNamespace(from_numpy=lambda data: FakeTensor(data))
+    fake_soundfile = types.SimpleNamespace(
+        read=lambda *args, **kwargs: (np.ones(16000, dtype=np.float32), 16000),
+        write=lambda path, data, sr: Path(path).write_bytes(b"wav"),
+    )
+
+    def fake_get_speech_timestamps(audio_tensor, vad_model, **kwargs):
+        events.append("vad_process")
+        return [
+            {"start": 0.0, "end": 0.2},
+            {"start": 0.5, "end": 0.7},
+        ]
+
+    fake_silero_vad = types.SimpleNamespace(get_speech_timestamps=fake_get_speech_timestamps)
+
+    monkeypatch.setattr(asr, "torch", fake_torch, raising=False)
+    monkeypatch.setitem(sys.modules, "soundfile", fake_soundfile)
+    monkeypatch.setitem(sys.modules, "silero_vad", fake_silero_vad)
+
+    helper = asr.MLXASRHelper(
+        asr_model_path="fake-asr",
+        aligner_model_path="fake-aligner",
+        filter_fillers=True,
+        enable_align=True,
+    )
+
+    def fake_load_vad_model():
+        events.append("load:vad")
+        helper.vad_model = object()
+
+    def fake_unload_vad_model():
+        events.append("unload:vad")
+        helper.vad_model = None
+
+    def fake_load_asr_model():
+        assert helper.vad_model is None
+        assert helper._mlx_aligner is None
+        events.append("load:asr")
+        helper.asr_model = object()
+
+    def fake_generate_asr_text(audio_path, source_lang):
+        assert helper.vad_model is None
+        assert helper.asr_model is not None
+        assert helper._mlx_aligner is None
+        events.append("asr_process")
+        return "hello world"
+
+    def fake_unload_asr_model():
+        events.append("unload:asr")
+        helper.asr_model = None
+
+    def fake_load_aligner_model():
+        assert helper.vad_model is None
+        assert helper.asr_model is None
+        events.append("load:aligner")
+        helper._mlx_aligner = object()
+
+    def fake_align_text(audio_path, text, time_offset, source_lang):
+        assert helper.vad_model is None
+        assert helper.asr_model is None
+        assert helper._mlx_aligner is not None
+        events.append("align_process")
+        return [
+            asr._MLXTimestampItem("hello", time_offset, time_offset + 0.1),
+            asr._MLXTimestampItem("world", time_offset + 0.1, time_offset + 0.2),
+        ]
+
+    def fake_unload_aligner_model():
+        events.append("unload:aligner")
+        helper._mlx_aligner = None
+
+    monkeypatch.setattr(helper, "load_vad_model", fake_load_vad_model)
+    monkeypatch.setattr(helper, "unload_vad_model", fake_unload_vad_model)
+    monkeypatch.setattr(helper, "load_asr_model", fake_load_asr_model)
+    monkeypatch.setattr(helper, "_generate_asr_text", fake_generate_asr_text)
+    monkeypatch.setattr(helper, "unload_asr_model", fake_unload_asr_model)
+    monkeypatch.setattr(helper, "load_aligner_model", fake_load_aligner_model)
+    monkeypatch.setattr(helper, "_align_text", fake_align_text)
+    monkeypatch.setattr(helper, "unload_aligner_model", fake_unload_aligner_model)
+
+    segments = helper.transcribe_with_vad("fake.wav", get_audio_duration=lambda _: 0.2)
+
+    assert [seg.text for seg in segments] == ["hello world", "hello world"]
+    assert events == [
+        "load:vad",
+        "vad_process",
+        "unload:vad",
+        "load:asr",
+        "asr_process",
+        "asr_process",
+        "unload:asr",
+        "load:aligner",
+        "align_process",
+        "align_process",
+        "unload:aligner",
+    ]
+
+
 def test_mlx_asr_helper_skips_alignment_when_disabled(monkeypatch):
     """Disabling align should skip aligner generation and fall back to a single timed segment."""
     import pycut.asr as asr
