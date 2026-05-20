@@ -60,6 +60,8 @@ def _expand_video_inputs(raw_inputs: Iterable[str]) -> List[str]:
                 (p for p in candidate.rglob("*") if _is_media_file(p)),
                 key=lambda p: str(p).lower(),
             )
+        elif candidate.exists() and _is_media_file(candidate):
+            matches = [candidate]
         elif any(ch in raw for ch in "*?[]"):
             glob_pattern = str(candidate)
             matches = sorted(
@@ -78,8 +80,6 @@ def _expand_video_inputs(raw_inputs: Iterable[str]) -> List[str]:
                         key=lambda p: p.name.lower(),
                     )
             matches = [p for p in matches if _is_media_file(p)]
-        elif candidate.exists() and _is_media_file(candidate):
-            matches = [candidate]
         resolved.extend(str(p.resolve()) for p in matches)
 
     deduped: List[str] = []

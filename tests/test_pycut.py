@@ -8,6 +8,7 @@ import inspect
 import os
 import platform
 import sys
+from pathlib import Path
 import tomllib
 import builtins
 import types
@@ -124,6 +125,16 @@ def test_package_metadata_declares_runtime_dependencies_used_by_source():
 
     assert "numpy" in dependency_names
     assert "soundfile" in dependency_names
+
+
+def test_expand_video_inputs_treats_existing_bracketed_media_path_as_literal_file(tmp_path):
+    """Existing media files with [] in their names should not be treated as glob patterns."""
+    from pycut.video_io import _expand_video_inputs
+
+    media_path = tmp_path / "Nvidia CEO Jensen Huang on AI, Musk and Trump [c-XAL2oYelI].m4a"
+    media_path.write_bytes(b"fake audio")
+
+    assert _expand_video_inputs([str(media_path)]) == [str(media_path.resolve())]
 
 
 def test_asr_loader_surface_omits_legacy_runtime_knobs():
