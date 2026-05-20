@@ -52,6 +52,8 @@ pycut --help
 
 If you update later, reinstall or upgrade the tool with `uv tool`.
 
+`pycut` installs its Python runtime dependencies, including `soundfile` for VAD-based transcription, from package metadata. If an older tool environment is missing it, reinstall the tool or run `uv tool install --reinstall https://github.com/cliptate/pycut.git`.
+
 ### 3. Clone the repository for local development
 
 ```bash

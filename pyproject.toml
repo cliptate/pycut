@@ -12,9 +12,11 @@ dependencies = [
     "openai>=1.0.0",
     "httpx<0.28",
     "mlx-audio>=0.4.3",
+    "numpy>=1.26",
     "py-googletrans>=4.0.0",
     "pyobjc-framework-naturallanguage>=12.1",
     "silero-vad>=6.2.1",
+    "soundfile>=0.12.1",
 ]
 
 [project.scripts]

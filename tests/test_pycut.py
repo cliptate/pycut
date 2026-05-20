@@ -8,6 +8,8 @@ import inspect
 import os
 import platform
 import sys
+import tomllib
+import builtins
 import types
 
 import pytest
@@ -109,6 +111,19 @@ def test_asr_module_exposes_mlx_helpers():
 
     assert hasattr(asr, "MLXASRHelper")
     assert hasattr(asr, "load_mlx_stt_model")
+
+
+def test_package_metadata_declares_runtime_dependencies_used_by_source():
+    """Installed CLI environments must include direct runtime deps used by source."""
+    pyproject_path = os.path.join(os.path.dirname(__file__), "..", "pyproject.toml")
+    with open(pyproject_path, "rb") as f:
+        pyproject = tomllib.load(f)
+
+    dependencies = pyproject["project"]["dependencies"]
+    dependency_names = {dep.split(";")[0].split("[")[0].split(">")[0].split("<")[0].split("=")[0].strip() for dep in dependencies}
+
+    assert "numpy" in dependency_names
+    assert "soundfile" in dependency_names
 
 
 def test_asr_loader_surface_omits_legacy_runtime_knobs():
@@ -582,6 +597,28 @@ def test_transcribe_with_vad_requires_torch_when_optional_dependency_missing(mon
         helper.transcribe_with_vad("fake.wav")
 
 
+def test_transcribe_with_vad_reports_soundfile_install_guidance(monkeypatch):
+    """VAD transcription should explain how to install soundfile when it is missing."""
+    import pycut.asr as asr
+
+    helper = asr.MLXASRHelper.__new__(asr.MLXASRHelper)
+    helper.vad_model = object()
+    helper.load_vad_model = lambda: None
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "soundfile":
+            raise ModuleNotFoundError("No module named 'soundfile'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(asr, "torch", object(), raising=False)
+
+    with pytest.raises(RuntimeError, match="Install it with: pip install soundfile"):
+        helper.transcribe_with_vad("fake.wav")
+
+
 def test_dependency_checks_omit_legacy_non_mac_paths():
     """Dependency helper checks should only encode the supported macOS Apple Silicon path."""
     legacy_free_sources = [
@@ -639,6 +676,13 @@ def _check_imports():
         print(f"✅ numpy {np.__version__}")
     except ImportError as e:
         print(f"❌ numpy: {e}")
+        return False
+
+    try:
+        import soundfile  # noqa: F401
+        print("✅ soundfile")
+    except ImportError as e:
+        print(f"❌ soundfile: {e}")
         return False
 
     return True
@@ -781,7 +825,7 @@ def main():
         print("❌ Some dependencies are missing.")
         print("\nPlease install missing dependencies:")
         print("  Supported runtime: macOS Apple Silicon only")
-        print("  pip install mlx-audio py-googletrans 'httpx<0.28' google-generativeai numpy")
+        print("  pip install mlx-audio py-googletrans 'httpx<0.28' google-generativeai numpy soundfile")
         print("  # And install ffmpeg for your platform")
     print("="*60)
     

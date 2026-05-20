@@ -52,6 +52,8 @@ pycut --help
 
 后续更新时，继续使用 `uv tool` 重新安装或升级即可。
 
+`pycut` 会根据包元数据安装 Python 运行时依赖，其中包括 VAD 转录所需的 `soundfile`。如果旧的工具环境里缺少它，重新安装工具，或执行 `uv tool install --reinstall https://github.com/cliptate/pycut.git`。
+
 ### 3. 克隆仓库用于本地开发
 
 如果你要调试、修改代码或运行测试，克隆仓库更合适：

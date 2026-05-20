@@ -221,7 +221,12 @@ class MLXASRHelper:
                 "(and torchaudio if you need resampling): pip install torch torchaudio"
             )
 
-        import soundfile as sf
+        try:
+            import soundfile as sf
+        except ImportError as exc:
+            raise RuntimeError(
+                "VAD transcription requires soundfile. Install it with: pip install soundfile"
+            ) from exc
         from silero_vad import get_speech_timestamps
 
         self.load_vad_model()
