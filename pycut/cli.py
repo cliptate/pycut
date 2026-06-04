@@ -6,11 +6,13 @@ Video clipping CLI entry point.
 
 import os
 import argparse
+import sys
 from pathlib import Path
 from typing import Dict
 
 import pycut.config as config
 from pycut.clipper import VideoClipper
+from pycut.tts import synthesize_text_to_wav
 from pycut.utils import normalize_hex_color
 from pycut.video_io import (
     _parse_output_formats, _expand_video_inputs,
@@ -18,12 +20,27 @@ from pycut.video_io import (
 
 
 def _resolve_default_asr_model(source_lang: str) -> str:
+    if config.select_asr_backend() == "qwen":
+        return config.resolve_default_qwen_asr_model()
+
     normalized = (source_lang or "").strip().lower()
     if normalized.startswith("zh"):
         return config.DEFAULT_CHINESE_ASR_MODEL
     if normalized.startswith("en"):
         return config.DEFAULT_EN_ASR_MODEL
     return config.DEFAULT_FALLBACK_ASR_MODEL
+
+
+def _resolve_default_aligner_model() -> str:
+    if config.select_asr_backend() == "qwen":
+        return config.resolve_default_qwen_aligner_model()
+    return config.DEFAULT_ALIGNER_MODEL
+
+
+def _resolve_default_tts_model() -> str:
+    if config.select_tts_backend() == "mlx":
+        return config.resolve_default_mlx_tts_model()
+    return config.resolve_default_voxcpm_tts_model()
 
 
 def _resolve_output_dir(video_path: str, explicit_output_dir: str | None) -> str:
@@ -41,7 +58,7 @@ def _parse_hex_color(value: str) -> str:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
-def main():
+def _build_clip_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Video clipping with ASR, analysis, translation, and subtitles\n\n"
@@ -78,8 +95,8 @@ def main():
     )
     parser.add_argument(
         "--aligner-model",
-        default=config.DEFAULT_ALIGNER_MODEL,
-        help=f"Aligner model path (default: {config.DEFAULT_ALIGNER_MODEL})",
+        default=None,
+        help="Aligner model path (default: selected by current system)",
     )
     parser.add_argument(
         "--no-align",
@@ -150,8 +167,69 @@ def main():
                         help="Frame rate for FCPXML export (default: 25.0)")
     parser.add_argument("--fcpxml-speed", type=float, default=1.0,
                         help="Timeline speed multiplier for FCPXML export (e.g. 1.1 = 1.1x) (default: 1.0)")
+    return parser
 
-    args = parser.parse_args()
+
+def _build_tts_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="pycut tts",
+        description="Generate speech WAV from text using the current system's TTS backend.",
+    )
+    text_group = parser.add_mutually_exclusive_group(required=True)
+    text_group.add_argument("--text", help="Text to synthesize")
+    text_group.add_argument("--text-file", help="UTF-8 text file to synthesize")
+    parser.add_argument("-o", "--output", required=True, help="Output WAV path")
+    parser.add_argument(
+        "--tts-model",
+        default=None,
+        help="TTS model path (default: selected by current system)",
+    )
+    parser.add_argument("--voice", default="Chelsie", help="MLX voice name (default: Chelsie)")
+    parser.add_argument("--lang-code", default=None, help="MLX language hint, e.g. English or Chinese")
+    parser.add_argument("--speed", type=float, default=None, help="MLX speed control when supported")
+    parser.add_argument("--device", default=None, help="VoxCPM device override, e.g. cuda, cpu, mps")
+    parser.add_argument("--reference-audio", default=None, help="VoxCPM reference audio for voice cloning")
+    parser.add_argument("--prompt-audio", default=None, help="VoxCPM prompt audio path")
+    parser.add_argument("--prompt-text", default=None, help="Text corresponding to --prompt-audio")
+    parser.add_argument("--cfg", type=float, default=2.0, help="VoxCPM CFG value (default: 2.0)")
+    parser.add_argument("--steps", type=int, default=10, help="VoxCPM inference steps (default: 10)")
+    parser.add_argument("--normalize", action="store_true", help="Enable backend text normalization")
+    return parser
+
+
+def _run_tts(argv: list[str]):
+    parser = _build_tts_parser()
+    args = parser.parse_args(argv)
+
+    if args.text_file:
+        text = Path(args.text_file).read_text(encoding="utf-8")
+    else:
+        text = args.text or ""
+    text = text.strip()
+    if not text:
+        parser.error("TTS text is empty")
+
+    output_path = synthesize_text_to_wav(
+        text=text,
+        output_path=args.output,
+        model_path=args.tts_model or _resolve_default_tts_model(),
+        voice=args.voice,
+        lang_code=args.lang_code,
+        speed=args.speed,
+        device=args.device,
+        reference_audio=args.reference_audio,
+        prompt_audio=args.prompt_audio,
+        prompt_text=args.prompt_text,
+        cfg_value=args.cfg,
+        inference_timesteps=args.steps,
+        normalize=args.normalize,
+    )
+    return {"tts": output_path}
+
+
+def _run_clip(argv: list[str]):
+    parser = _build_clip_parser()
+    args = parser.parse_args(argv)
     try:
         output_formats = _parse_output_formats(args.format)
     except ValueError as exc:
@@ -163,10 +241,11 @@ def main():
 
     # Initialize clipper
     resolved_asr_model = args.asr_model or _resolve_default_asr_model(args.source_lang)
+    resolved_aligner_model = args.aligner_model or _resolve_default_aligner_model()
 
     clipper = VideoClipper(
         asr_model_path=resolved_asr_model,
-        aligner_model_path=args.aligner_model,
+        aligner_model_path=resolved_aligner_model,
         enable_align=args.enable_align,
         api_key=api_key,
         base_url=args.base_url,
@@ -217,6 +296,13 @@ def main():
     if len(input_videos) == 1:
         return all_results[input_videos[0]]
     return all_results
+
+
+def main(argv: list[str] | None = None):
+    resolved_argv = list(sys.argv[1:] if argv is None else argv)
+    if resolved_argv and resolved_argv[0] == "tts":
+        return _run_tts(resolved_argv[1:])
+    return _run_clip(resolved_argv)
 
 
 if __name__ == "__main__":

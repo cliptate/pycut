@@ -321,11 +321,33 @@ def _split_bucket_by_nltokenizer(
             lt = cur
         return t
 
+    def _fallback_split_idx(ws: List[dict]) -> Optional[int]:
+        if len(ws) < 2:
+            return None
+        rendered = []
+        lengths = []
+        last = ""
+        total = 0
+        for w in ws:
+            cur = w["word"]
+            if _needs_space(last, cur):
+                rendered.append(" ")
+                total += 1
+            rendered.append(cur)
+            total += len(cur)
+            lengths.append(total)
+            last = cur
+        target = max_chars if max_chars > 0 else max(1, total // 2)
+        best_idx = min(range(len(lengths) - 1), key=lambda idx: abs(lengths[idx] - target))
+        return best_idx
+
     def _split_recursive(ws: List[dict]) -> List["Segment"]:
         if len(ws) < 2 or len(_build_text(ws)) <= max_chars:
             return [_emit(ws)]
         idx = _nl_tagger_best_split_idx(ws)
         # print(f"_split_recursive: text='{_build_text(ws)}' idx={idx}")
+        if idx is None:
+            idx = _fallback_split_idx(ws)
         if idx is None:
             return [_emit(ws)]
         first, second = ws[: idx + 1], ws[idx + 1 :]

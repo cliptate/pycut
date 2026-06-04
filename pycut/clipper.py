@@ -24,7 +24,7 @@ import pycut.config as config
 import pycut.fcpxml as fcpxml_mod
 import pycut.renderer as renderer_mod
 import pycut.subtitle as subtitle_mod
-from pycut.asr import MLXASRHelper
+from pycut.asr import MLXASRHelper, QwenASRHelper
 from pycut.models import Highlight
 from pycut.translation import GoogleTranslator
 from pycut.utils import (
@@ -47,8 +47,8 @@ class VideoClipper:
     
     def __init__(
         self,
-        asr_model_path: Optional[str] = config.DEFAULT_EN_ASR_MODEL,
-        aligner_model_path: Optional[str] = config.DEFAULT_ALIGNER_MODEL,
+        asr_model_path: Optional[str] = None,
+        aligner_model_path: Optional[str] = None,
         enable_align: bool = True,
         gemini_api_key: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -62,21 +62,29 @@ class VideoClipper:
     ):
         config.ensure_supported_runtime()
         self.segment_duration = segment_duration
-        self.asr_model_path = asr_model_path or config.DEFAULT_EN_ASR_MODEL
-        self.aligner_model_path = aligner_model_path or config.DEFAULT_ALIGNER_MODEL
+        self.asr_backend = config.select_asr_backend()
+        default_asr_model = (
+            config.DEFAULT_EN_ASR_MODEL if self.asr_backend == "mlx" else config.resolve_default_qwen_asr_model()
+        )
+        default_aligner_model = (
+            config.DEFAULT_ALIGNER_MODEL if self.asr_backend == "mlx" else config.resolve_default_qwen_aligner_model()
+        )
+        self.asr_model_path = asr_model_path or default_asr_model
+        self.aligner_model_path = aligner_model_path or default_aligner_model
         self.enable_align = enable_align
         self.translator = translator or GoogleTranslator()
         self.max_duration = max_duration
         self.max_chars = max_chars
         self.filter_fillers = filter_fillers
-        self.asr_helper = MLXASRHelper(
+        helper_cls = MLXASRHelper if self.asr_backend == "mlx" else QwenASRHelper
+        self.asr_helper = helper_cls(
             asr_model_path=self.asr_model_path,
             aligner_model_path=self.aligner_model_path,
             filter_fillers=self.filter_fillers,
             enable_align=self.enable_align,
         )
         
-        backend_info = "MLX (Apple Silicon)"
+        backend_info = "MLX (Apple Silicon)" if self.asr_backend == "mlx" else "Qwen3-ASR"
         print(f"🚀 Initializing VideoClipper with {backend_info} backend")
         print(f"   Models will be loaded on demand to save memory")
         
@@ -98,9 +106,13 @@ class VideoClipper:
     def _get_asr_helper(self) -> MLXASRHelper:
         helper = getattr(self, "asr_helper", None)
         if helper is None:
-            helper = MLXASRHelper(
-                asr_model_path=getattr(self, "asr_model_path", config.DEFAULT_EN_ASR_MODEL),
-                aligner_model_path=getattr(self, "aligner_model_path", config.DEFAULT_ALIGNER_MODEL),
+            backend = getattr(self, "asr_backend", config.select_asr_backend())
+            helper_cls = MLXASRHelper if backend == "mlx" else QwenASRHelper
+            default_asr_model = config.DEFAULT_EN_ASR_MODEL if backend == "mlx" else config.resolve_default_qwen_asr_model()
+            default_aligner_model = config.DEFAULT_ALIGNER_MODEL if backend == "mlx" else config.resolve_default_qwen_aligner_model()
+            helper = helper_cls(
+                asr_model_path=getattr(self, "asr_model_path", default_asr_model),
+                aligner_model_path=getattr(self, "aligner_model_path", default_aligner_model),
                 filter_fillers=getattr(self, "filter_fillers", True),
                 enable_align=getattr(self, "enable_align", True),
             )

@@ -11,6 +11,7 @@ try:
 except ImportError:
     torch = None
 
+import pycut.config as config
 from pycut.utils import (
     Segment,
     _attach_punctuation_to_words,
@@ -20,7 +21,7 @@ from pycut.utils import (
     filter_text,
 )
 
-__all__ = ["MLXASRHelper", "load_mlx_stt_model"]
+__all__ = ["MLXASRHelper", "QwenASRHelper", "load_mlx_stt_model", "load_qwen_asr_model"]
 
 
 def load_mlx_stt_model(model_name: str):
@@ -32,11 +33,91 @@ def load_mlx_stt_model(model_name: str):
         raise RuntimeError("MLX backend requires mlx-audio. Install with: pip install mlx-audio") from exc
 
 
+def load_qwen_asr_model(
+    model_name: str,
+    *,
+    forced_aligner: str | None = None,
+    max_inference_batch_size: int = 32,
+    max_new_tokens: int = 512,
+):
+    try:
+        from qwen_asr import Qwen3ASRModel
+    except ImportError as exc:
+        raise RuntimeError("Qwen ASR backend requires qwen-asr. Install with: pip install qwen-asr") from exc
+
+    if torch is None:
+        raise RuntimeError("Qwen ASR backend requires torch. Install with: pip install torch")
+
+    if getattr(torch, "cuda", None) is not None and torch.cuda.is_available():
+        dtype = torch.bfloat16
+        device_map = "cuda:0"
+    else:
+        dtype = torch.float32
+        device_map = "cpu"
+
+    kwargs = {
+        "dtype": dtype,
+        "device_map": device_map,
+        "max_inference_batch_size": max_inference_batch_size,
+        "max_new_tokens": max_new_tokens,
+    }
+    if forced_aligner:
+        kwargs["forced_aligner"] = config.resolve_model_path(forced_aligner)
+        kwargs["forced_aligner_kwargs"] = {"dtype": dtype, "device_map": device_map}
+    resolved_model_name = config.resolve_model_path(model_name)
+    return Qwen3ASRModel.from_pretrained(resolved_model_name, **kwargs)
+
+
 @dataclass
 class _MLXTimestampItem:
     text: str
     start_time: float
     end_time: float
+
+
+_QWEN_LANGUAGE_MAP = {
+    "zh": "Chinese",
+    "zh-cn": "Chinese",
+    "zh-hans": "Chinese",
+    "zh-hant": "Chinese",
+    "yue": "Cantonese",
+    "cn": "Chinese",
+    "en": "English",
+    "en-us": "English",
+    "en-gb": "English",
+    "ar": "Arabic",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ko": "Korean",
+    "ru": "Russian",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "ja": "Japanese",
+    "tr": "Turkish",
+    "hi": "Hindi",
+    "ms": "Malay",
+    "nl": "Dutch",
+    "sv": "Swedish",
+    "da": "Danish",
+    "fi": "Finnish",
+    "pl": "Polish",
+    "cs": "Czech",
+    "fil": "Filipino",
+    "fa": "Persian",
+    "el": "Greek",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "mk": "Macedonian",
+}
+
+
+def _qwen_language(source_lang: str) -> str | None:
+    normalized = (source_lang or "").strip().lower().replace("_", "-")
+    return _QWEN_LANGUAGE_MAP.get(normalized)
 
 
 class MLXASRHelper:
@@ -433,3 +514,118 @@ class MLXASRHelper:
 
         print(f"✅ VAD+ASR produced {len(all_segments)} segments")
         return all_segments
+
+
+class QwenASRHelper(MLXASRHelper):
+    def __init__(
+        self,
+        *,
+        asr_model_path: str,
+        aligner_model_path: str,
+        filter_fillers: bool = True,
+        enable_align: bool = True,
+    ):
+        super().__init__(
+            asr_model_path=asr_model_path,
+            aligner_model_path=aligner_model_path,
+            filter_fillers=filter_fillers,
+            enable_align=enable_align,
+        )
+        self._qwen_aligner = None
+
+    def load_asr_model(self):
+        if self.asr_model is not None:
+            return
+
+        resolved_model_path = config.resolve_model_path(self.asr_model_path)
+        print(f"📝 Loading Qwen3 ASR model from {resolved_model_path}...")
+        self.asr_model = load_qwen_asr_model(resolved_model_path)
+        print("✅ ASR model loaded!")
+
+    def load_aligner_model(self):
+        if not self.enable_align:
+            self._qwen_aligner = None
+            self._mlx_aligner = None
+            print("⏭️  Alignment disabled; skipping Qwen3 aligner load.")
+            return
+
+        if self._qwen_aligner is not None:
+            return
+
+        resolved_aligner_path = config.resolve_model_path(self.aligner_model_path)
+        print(f"📝 Loading Qwen3 forced aligner from {resolved_aligner_path}...")
+        try:
+            self._qwen_aligner = load_qwen_asr_model(
+                self.asr_model_path,
+                forced_aligner=resolved_aligner_path,
+            )
+            self._mlx_aligner = self._qwen_aligner
+        except (RuntimeError, ValueError) as exc:
+            self._qwen_aligner = None
+            self._mlx_aligner = None
+            print(f"⚠️  Failed to load Qwen3 aligner ({exc}); continuing without word alignment.")
+        if self._qwen_aligner is not None:
+            print("✅ Aligner model loaded!")
+
+    def unload_aligner_model(self):
+        if self._qwen_aligner is None and self._mlx_aligner is None:
+            return
+
+        print("🧹 Unloading aligner model to free memory...")
+        self._qwen_aligner = None
+        self._mlx_aligner = None
+        gc.collect()
+        print("✅ Aligner model unloaded!")
+
+    def _generate_asr_text(self, audio_path: str, source_lang: str) -> str:
+        language = _qwen_language(source_lang)
+        results = self.asr_model.transcribe(audio=audio_path, language=language)
+        if not results:
+            return ""
+        return str(getattr(results[0], "text", "") or "").strip()
+
+    def _align_text(
+        self,
+        audio_path: str,
+        text: str,
+        time_offset: float,
+        source_lang: str,
+    ) -> List[_MLXTimestampItem]:
+        if not self.enable_align or self._qwen_aligner is None:
+            return []
+
+        language = _qwen_language(source_lang)
+        if language is None:
+            return []
+
+        try:
+            results = self._qwen_aligner.transcribe(
+                audio=audio_path,
+                language=language,
+                return_time_stamps=True,
+            )
+        except ValueError as exc:
+            print(f"⚠️  Qwen3 alignment skipped ({exc}).")
+            return []
+
+        if not results:
+            return []
+
+        stamps = getattr(results[0], "time_stamps", None)
+        if stamps is None:
+            return []
+        items = getattr(stamps, "items", stamps)
+
+        aligned_items = []
+        for item in items:
+            token = str(getattr(item, "text", "")).strip()
+            if not token:
+                continue
+            aligned_items.append(
+                _MLXTimestampItem(
+                    text=token,
+                    start_time=float(getattr(item, "start_time", 0.0)) + time_offset,
+                    end_time=float(getattr(item, "end_time", 0.0)) + time_offset,
+                )
+            )
+        return aligned_items

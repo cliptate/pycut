@@ -1,6 +1,6 @@
 # pycut
 
-> AI-powered video clipping for Apple Silicon Macs.
+> AI-powered video clipping and local speech tools.
 
 **Languages:** [English](README.md) | [中文](README.zh-CN.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
@@ -8,7 +8,8 @@
 
 ## Features
 
-- Local ASR on Apple Silicon with MLX-backed models
+- Local ASR selected by system: MLX on Apple Silicon, Qwen3-ASR on Linux/Windows
+- Separate `pycut tts` command for WAV speech generation
 - AI highlight extraction and auto-generated titles
 - Translation and bilingual subtitle layouts
 - Keyword highlighting for important words inside subtitles
@@ -21,12 +22,14 @@
 
 | Item | Requirement |
 | --- | --- |
-| OS | macOS on Apple Silicon (`arm64` / `aarch64`) |
+| OS | macOS on Apple Silicon (`arm64` / `aarch64`), Linux, or Windows |
 | Python | 3.12+ |
 | FFmpeg | Must be installed and available in `PATH` |
 | API key | Required only for AI highlight extraction, keyword highlighting, or transcript correction |
 
-`pycut` currently rejects Intel Macs and non-macOS environments at runtime.
+ASR/TTS models are selected automatically from the current system. Intel Macs and unsupported systems are rejected at runtime.
+
+When a complete model snapshot already exists under the Hugging Face cache (`~/.cache/huggingface/hub`, or `HF_HUB_CACHE` / `HF_HOME`), `pycut` uses that local snapshot path before attempting any network download. Incomplete snapshots are skipped; for Qwen ASR on Linux/Windows, a complete cached `Qwen/Qwen3-ASR-0.6B` is used when the default `Qwen/Qwen3-ASR-1.7B` cache is incomplete.
 
 ## Install
 
@@ -48,11 +51,14 @@ After installation, you can run `pycut` directly:
 
 ```bash
 pycut --help
+pycut tts --help
 ```
 
 If you update later, reinstall or upgrade the tool with `uv tool`.
 
 `pycut` installs its Python runtime dependencies, including `soundfile` for VAD-based transcription, from package metadata. If an older tool environment is missing it, reinstall the tool or run `uv tool install --reinstall https://github.com/cliptate/pycut.git`.
+
+The project configures uv to resolve packages from the Alibaba Cloud PyPI mirror (`https://mirrors.aliyun.com/pypi/simple`) to speed up dependency downloads.
 
 ### 3. Clone the repository for local development
 
@@ -175,7 +181,7 @@ Supported media extensions:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--asr-model` | auto by source language | `en` uses Parakeet, `zh*` uses Qwen3 ASR, others use Whisper Large v3 Turbo |
-| `--aligner-model` | `mlx-community/Qwen3-ForcedAligner-0.6B-8bit` | Word alignment model |
+| `--aligner-model` | auto by system | macOS uses MLX Qwen3 aligner; Linux/Windows use `Qwen/Qwen3-ForcedAligner-0.6B` |
 | `--segment-duration` | `300` | Audio chunk size in seconds for long media |
 | `--no-filter-fillers` | off | Keep filler words such as `um` / `uh` |
 
@@ -228,6 +234,22 @@ Supported media extensions:
 | `video` | Burned-in MP4 output |
 | `txt` | Plain transcript |
 | `json` | Timestamped transcript JSON reusable with `--transcript` |
+
+## TTS command
+
+`pycut tts` is separate from video clipping and writes a WAV file:
+
+```bash
+pycut tts --text "Hello from pycut" --output voice.wav
+pycut tts --text-file script.txt --output voice.wav
+```
+
+Default TTS models:
+
+| System | Backend | Default model |
+| --- | --- | --- |
+| macOS Apple Silicon | MLX Audio | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` |
+| Linux / Windows | VoxCPM | `openbmb/VoxCPM2` |
 
 ## Examples
 

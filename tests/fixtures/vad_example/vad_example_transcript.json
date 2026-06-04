@@ -1,0 +1,2399 @@
+{
+  "title": "",
+  "subtitle": "",
+  "segments": [
+    {
+      "start": 0.5,
+      "end": 1.22,
+      "text": "试错的过程",
+      "words": [
+        {
+          "word": "试",
+          "start": 0.5,
+          "end": 0.58,
+          "punctuation": ""
+        },
+        {
+          "word": "错",
+          "start": 0.58,
+          "end": 0.74,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 0.74,
+          "end": 0.8200000000000001,
+          "punctuation": ""
+        },
+        {
+          "word": "过",
+          "start": 0.8200000000000001,
+          "end": 1.06,
+          "punctuation": ""
+        },
+        {
+          "word": "程",
+          "start": 1.06,
+          "end": 1.22,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 1.6,
+      "end": 2.0,
+      "text": "很简单",
+      "words": [
+        {
+          "word": "很",
+          "start": 1.6,
+          "end": 1.6800000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "简",
+          "start": 1.76,
+          "end": 1.84,
+          "punctuation": ""
+        },
+        {
+          "word": "单",
+          "start": 1.84,
+          "end": 2.0,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 2.98,
+      "end": 3.7,
+      "text": "就特别是今天",
+      "words": [
+        {
+          "word": "就",
+          "start": 2.98,
+          "end": 3.06,
+          "punctuation": ""
+        },
+        {
+          "word": "特",
+          "start": 3.06,
+          "end": 3.2199999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "别",
+          "start": 3.2199999999999998,
+          "end": 3.3,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 3.3,
+          "end": 3.38,
+          "punctuation": ""
+        },
+        {
+          "word": "今",
+          "start": 3.38,
+          "end": 3.54,
+          "punctuation": ""
+        },
+        {
+          "word": "天",
+          "start": 3.54,
+          "end": 3.7,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 4.0,
+      "end": 4.96,
+      "text": "报名昌学卡的同学",
+      "words": [
+        {
+          "word": "报",
+          "start": 4.0,
+          "end": 4.16,
+          "punctuation": ""
+        },
+        {
+          "word": "名",
+          "start": 4.16,
+          "end": 4.24,
+          "punctuation": ""
+        },
+        {
+          "word": "昌",
+          "start": 4.24,
+          "end": 4.32,
+          "punctuation": ""
+        },
+        {
+          "word": "学",
+          "start": 4.32,
+          "end": 4.48,
+          "punctuation": ""
+        },
+        {
+          "word": "卡",
+          "start": 4.48,
+          "end": 4.64,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 4.64,
+          "end": 4.64,
+          "punctuation": ""
+        },
+        {
+          "word": "同",
+          "start": 4.64,
+          "end": 4.8,
+          "punctuation": ""
+        },
+        {
+          "word": "学",
+          "start": 4.8,
+          "end": 4.96,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 5.38,
+      "end": 5.859999999999999,
+      "text": "你们可以",
+      "words": [
+        {
+          "word": "你",
+          "start": 5.38,
+          "end": 5.46,
+          "punctuation": ""
+        },
+        {
+          "word": "们",
+          "start": 5.46,
+          "end": 5.54,
+          "punctuation": ""
+        },
+        {
+          "word": "可",
+          "start": 5.54,
+          "end": 5.7,
+          "punctuation": ""
+        },
+        {
+          "word": "以",
+          "start": 5.7,
+          "end": 5.859999999999999,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 6.7,
+      "end": 7.66,
+      "text": "听到后面的有",
+      "words": [
+        {
+          "word": "听",
+          "start": 6.7,
+          "end": 6.78,
+          "punctuation": ""
+        },
+        {
+          "word": "到",
+          "start": 6.78,
+          "end": 6.86,
+          "punctuation": ""
+        },
+        {
+          "word": "后",
+          "start": 6.86,
+          "end": 7.0200000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "面",
+          "start": 7.0200000000000005,
+          "end": 7.18,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 7.18,
+          "end": 7.26,
+          "punctuation": ""
+        },
+        {
+          "word": "有",
+          "start": 7.58,
+          "end": 7.66,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 8.1,
+      "end": 8.5,
+      "text": "专门的",
+      "words": [
+        {
+          "word": "专",
+          "start": 8.1,
+          "end": 8.26,
+          "punctuation": ""
+        },
+        {
+          "word": "门",
+          "start": 8.26,
+          "end": 8.34,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 8.42,
+          "end": 8.5,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 8.8,
+      "end": 9.120000000000001,
+      "text": "活动课",
+      "words": [
+        {
+          "word": "活",
+          "start": 8.8,
+          "end": 8.8,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 8.8,
+          "end": 8.96,
+          "punctuation": ""
+        },
+        {
+          "word": "课",
+          "start": 8.96,
+          "end": 9.120000000000001,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 9.6,
+      "end": 10.32,
+      "text": "它会大大",
+      "words": [
+        {
+          "word": "它",
+          "start": 9.6,
+          "end": 9.68,
+          "punctuation": ""
+        },
+        {
+          "word": "会",
+          "start": 9.68,
+          "end": 9.76,
+          "punctuation": ""
+        },
+        {
+          "word": "大",
+          "start": 9.84,
+          "end": 10.08,
+          "punctuation": ""
+        },
+        {
+          "word": "大",
+          "start": 10.08,
+          "end": 10.32,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 10.7,
+      "end": 11.82,
+      "text": "降低你的试错成本",
+      "words": [
+        {
+          "word": "降",
+          "start": 10.7,
+          "end": 10.86,
+          "punctuation": ""
+        },
+        {
+          "word": "低",
+          "start": 11.02,
+          "end": 11.1,
+          "punctuation": ""
+        },
+        {
+          "word": "你",
+          "start": 11.1,
+          "end": 11.18,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 11.18,
+          "end": 11.26,
+          "punctuation": ""
+        },
+        {
+          "word": "试",
+          "start": 11.26,
+          "end": 11.42,
+          "punctuation": ""
+        },
+        {
+          "word": "错",
+          "start": 11.42,
+          "end": 11.58,
+          "punctuation": ""
+        },
+        {
+          "word": "成",
+          "start": 11.58,
+          "end": 11.66,
+          "punctuation": ""
+        },
+        {
+          "word": "本",
+          "start": 11.739999999999998,
+          "end": 11.82,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 12.4,
+      "end": 12.96,
+      "text": "其实你也可以",
+      "words": [
+        {
+          "word": "其",
+          "start": 12.4,
+          "end": 12.48,
+          "punctuation": ""
+        },
+        {
+          "word": "实",
+          "start": 12.48,
+          "end": 12.56,
+          "punctuation": ""
+        },
+        {
+          "word": "你",
+          "start": 12.56,
+          "end": 12.64,
+          "punctuation": ""
+        },
+        {
+          "word": "也",
+          "start": 12.64,
+          "end": 12.72,
+          "punctuation": ""
+        },
+        {
+          "word": "可",
+          "start": 12.72,
+          "end": 12.88,
+          "punctuation": ""
+        },
+        {
+          "word": "以",
+          "start": 12.88,
+          "end": 12.96,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 13.2,
+      "end": 13.68,
+      "text": "不要来听课",
+      "words": [
+        {
+          "word": "不",
+          "start": 13.2,
+          "end": 13.28,
+          "punctuation": ""
+        },
+        {
+          "word": "要",
+          "start": 13.28,
+          "end": 13.36,
+          "punctuation": ""
+        },
+        {
+          "word": "来",
+          "start": 13.36,
+          "end": 13.44,
+          "punctuation": ""
+        },
+        {
+          "word": "听",
+          "start": 13.44,
+          "end": 13.6,
+          "punctuation": ""
+        },
+        {
+          "word": "课",
+          "start": 13.6,
+          "end": 13.68,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 14.1,
+      "end": 14.34,
+      "text": "为什么",
+      "words": [
+        {
+          "word": "为",
+          "start": 14.1,
+          "end": 14.18,
+          "punctuation": ""
+        },
+        {
+          "word": "什",
+          "start": 14.18,
+          "end": 14.26,
+          "punctuation": ""
+        },
+        {
+          "word": "么",
+          "start": 14.26,
+          "end": 14.34,
+          "punctuation": "？"
+        }
+      ]
+    },
+    {
+      "start": 14.7,
+      "end": 15.34,
+      "text": "你自己写嘛",
+      "words": [
+        {
+          "word": "你",
+          "start": 14.7,
+          "end": 14.78,
+          "punctuation": ""
+        },
+        {
+          "word": "自",
+          "start": 14.78,
+          "end": 14.94,
+          "punctuation": ""
+        },
+        {
+          "word": "己",
+          "start": 14.94,
+          "end": 15.02,
+          "punctuation": ""
+        },
+        {
+          "word": "写",
+          "start": 15.02,
+          "end": 15.18,
+          "punctuation": ""
+        },
+        {
+          "word": "嘛",
+          "start": 15.18,
+          "end": 15.34,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 16.1,
+      "end": 17.060000000000002,
+      "text": "我写今天写五个点",
+      "words": [
+        {
+          "word": "我",
+          "start": 16.1,
+          "end": 16.18,
+          "punctuation": ""
+        },
+        {
+          "word": "写",
+          "start": 16.18,
+          "end": 16.26,
+          "punctuation": ""
+        },
+        {
+          "word": "今",
+          "start": 16.26,
+          "end": 16.5,
+          "punctuation": ""
+        },
+        {
+          "word": "天",
+          "start": 16.5,
+          "end": 16.580000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "写",
+          "start": 16.580000000000002,
+          "end": 16.740000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "五",
+          "start": 16.740000000000002,
+          "end": 16.82,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 16.82,
+          "end": 16.98,
+          "punctuation": ""
+        },
+        {
+          "word": "点",
+          "start": 16.98,
+          "end": 17.060000000000002,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 17.3,
+      "end": 17.700000000000003,
+      "text": "我就是",
+      "words": [
+        {
+          "word": "我",
+          "start": 17.3,
+          "end": 17.380000000000003,
+          "punctuation": ""
+        },
+        {
+          "word": "就",
+          "start": 17.380000000000003,
+          "end": 17.540000000000003,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 17.540000000000003,
+          "end": 17.700000000000003,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 18.0,
+      "end": 18.8,
+      "text": "试试验一下",
+      "words": [
+        {
+          "word": "试",
+          "start": 18.0,
+          "end": 18.24,
+          "punctuation": ""
+        },
+        {
+          "word": "试",
+          "start": 18.24,
+          "end": 18.4,
+          "punctuation": ""
+        },
+        {
+          "word": "验",
+          "start": 18.48,
+          "end": 18.48,
+          "punctuation": ""
+        },
+        {
+          "word": "一",
+          "start": 18.48,
+          "end": 18.64,
+          "punctuation": ""
+        },
+        {
+          "word": "下",
+          "start": 18.64,
+          "end": 18.8,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 18.96,
+      "end": 19.76,
+      "text": "发现这五个点不行",
+      "words": [
+        {
+          "word": "发",
+          "start": 18.96,
+          "end": 19.04,
+          "punctuation": ""
+        },
+        {
+          "word": "现",
+          "start": 19.04,
+          "end": 19.12,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 19.12,
+          "end": 19.2,
+          "punctuation": ""
+        },
+        {
+          "word": "五",
+          "start": 19.2,
+          "end": 19.28,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 19.28,
+          "end": 19.36,
+          "punctuation": ""
+        },
+        {
+          "word": "点",
+          "start": 19.36,
+          "end": 19.44,
+          "punctuation": ""
+        },
+        {
+          "word": "不",
+          "start": 19.44,
+          "end": 19.6,
+          "punctuation": ""
+        },
+        {
+          "word": "行",
+          "start": 19.6,
+          "end": 19.76,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 20.08,
+      "end": 20.8,
+      "text": "我再写五个点",
+      "words": [
+        {
+          "word": "我",
+          "start": 20.08,
+          "end": 20.16,
+          "punctuation": ""
+        },
+        {
+          "word": "再",
+          "start": 20.16,
+          "end": 20.240000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "写",
+          "start": 20.240000000000002,
+          "end": 20.4,
+          "punctuation": ""
+        },
+        {
+          "word": "五",
+          "start": 20.4,
+          "end": 20.56,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 20.56,
+          "end": 20.64,
+          "punctuation": ""
+        },
+        {
+          "word": "点",
+          "start": 20.64,
+          "end": 20.8,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 21.2,
+      "end": 21.84,
+      "text": "这是再不行",
+      "words": [
+        {
+          "word": "这",
+          "start": 21.2,
+          "end": 21.279999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 21.279999999999998,
+          "end": 21.439999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "再",
+          "start": 21.52,
+          "end": 21.599999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "不",
+          "start": 21.599999999999998,
+          "end": 21.759999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "行",
+          "start": 21.759999999999998,
+          "end": 21.84,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 22.5,
+      "end": 23.3,
+      "text": "那再写五个点嘛",
+      "words": [
+        {
+          "word": "那",
+          "start": 22.5,
+          "end": 22.58,
+          "punctuation": ""
+        },
+        {
+          "word": "再",
+          "start": 22.58,
+          "end": 22.74,
+          "punctuation": ""
+        },
+        {
+          "word": "写",
+          "start": 22.74,
+          "end": 22.9,
+          "punctuation": ""
+        },
+        {
+          "word": "五",
+          "start": 22.9,
+          "end": 22.98,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 22.98,
+          "end": 23.06,
+          "punctuation": ""
+        },
+        {
+          "word": "点",
+          "start": 23.06,
+          "end": 23.22,
+          "punctuation": ""
+        },
+        {
+          "word": "嘛",
+          "start": 23.22,
+          "end": 23.3,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 24.1,
+      "end": 24.5,
+      "text": "你总会",
+      "words": [
+        {
+          "word": "你",
+          "start": 24.1,
+          "end": 24.18,
+          "punctuation": ""
+        },
+        {
+          "word": "总",
+          "start": 24.18,
+          "end": 24.34,
+          "punctuation": ""
+        },
+        {
+          "word": "会",
+          "start": 24.34,
+          "end": 24.5,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 25.1,
+      "end": 25.740000000000002,
+      "text": "所谓的",
+      "words": [
+        {
+          "word": "所",
+          "start": 25.1,
+          "end": 25.5,
+          "punctuation": ""
+        },
+        {
+          "word": "谓",
+          "start": 25.5,
+          "end": 25.66,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 25.66,
+          "end": 25.740000000000002,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 27.1,
+      "end": 28.62,
+      "text": "活动大神和所谓的高手",
+      "words": [
+        {
+          "word": "活",
+          "start": 27.1,
+          "end": 27.18,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 27.18,
+          "end": 27.26,
+          "punctuation": ""
+        },
+        {
+          "word": "大",
+          "start": 27.34,
+          "end": 27.5,
+          "punctuation": ""
+        },
+        {
+          "word": "神",
+          "start": 27.5,
+          "end": 27.580000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "和",
+          "start": 27.82,
+          "end": 27.98,
+          "punctuation": ""
+        },
+        {
+          "word": "所",
+          "start": 27.98,
+          "end": 28.220000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "谓",
+          "start": 28.220000000000002,
+          "end": 28.220000000000002,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 28.220000000000002,
+          "end": 28.3,
+          "punctuation": ""
+        },
+        {
+          "word": "高",
+          "start": 28.3,
+          "end": 28.46,
+          "punctuation": ""
+        },
+        {
+          "word": "手",
+          "start": 28.46,
+          "end": 28.62,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 30.2,
+      "end": 31.0,
+      "text": "都是只有一个",
+      "words": [
+        {
+          "word": "都",
+          "start": 30.2,
+          "end": 30.279999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 30.279999999999998,
+          "end": 30.52,
+          "punctuation": ""
+        },
+        {
+          "word": "只",
+          "start": 30.599999999999998,
+          "end": 30.759999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "有",
+          "start": 30.759999999999998,
+          "end": 30.84,
+          "punctuation": ""
+        },
+        {
+          "word": "一",
+          "start": 30.84,
+          "end": 30.919999999999998,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 30.919999999999998,
+          "end": 31.0,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 32.0,
+      "end": 32.88,
+      "text": "把所有的错",
+      "words": [
+        {
+          "word": "把",
+          "start": 32.0,
+          "end": 32.16,
+          "punctuation": ""
+        },
+        {
+          "word": "所",
+          "start": 32.16,
+          "end": 32.48,
+          "punctuation": ""
+        },
+        {
+          "word": "有",
+          "start": 32.48,
+          "end": 32.56,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 32.56,
+          "end": 32.64,
+          "punctuation": ""
+        },
+        {
+          "word": "错",
+          "start": 32.64,
+          "end": 32.88,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 33.2,
+      "end": 33.68,
+      "text": "所有的坑",
+      "words": [
+        {
+          "word": "所",
+          "start": 33.2,
+          "end": 33.36,
+          "punctuation": ""
+        },
+        {
+          "word": "有",
+          "start": 33.36,
+          "end": 33.36,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 33.440000000000005,
+          "end": 33.52,
+          "punctuation": ""
+        },
+        {
+          "word": "坑",
+          "start": 33.52,
+          "end": 33.68,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 34.0,
+      "end": 34.56,
+      "text": "全给我趟",
+      "words": [
+        {
+          "word": "全",
+          "start": 34.0,
+          "end": 34.080000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "给",
+          "start": 34.160000000000004,
+          "end": 34.160000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "我",
+          "start": 34.160000000000004,
+          "end": 34.32,
+          "punctuation": ""
+        },
+        {
+          "word": "趟",
+          "start": 34.32,
+          "end": 34.56,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 34.9,
+      "end": 35.059999999999995,
+      "text": "一遍",
+      "words": [
+        {
+          "word": "一",
+          "start": 34.9,
+          "end": 34.98,
+          "punctuation": ""
+        },
+        {
+          "word": "遍",
+          "start": 34.98,
+          "end": 35.059999999999995,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 35.6,
+      "end": 36.24,
+      "text": "留下正确的",
+      "words": [
+        {
+          "word": "留",
+          "start": 35.6,
+          "end": 35.68,
+          "punctuation": ""
+        },
+        {
+          "word": "下",
+          "start": 35.68,
+          "end": 35.84,
+          "punctuation": ""
+        },
+        {
+          "word": "正",
+          "start": 35.84,
+          "end": 36.0,
+          "punctuation": ""
+        },
+        {
+          "word": "确",
+          "start": 36.0,
+          "end": 36.160000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 36.160000000000004,
+          "end": 36.24,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 36.58,
+      "end": 37.3,
+      "text": "你就是所谓的大神",
+      "words": [
+        {
+          "word": "你",
+          "start": 36.58,
+          "end": 36.66,
+          "punctuation": ""
+        },
+        {
+          "word": "就",
+          "start": 36.66,
+          "end": 36.74,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 36.74,
+          "end": 36.82,
+          "punctuation": ""
+        },
+        {
+          "word": "所",
+          "start": 36.82,
+          "end": 36.98,
+          "punctuation": ""
+        },
+        {
+          "word": "谓",
+          "start": 36.98,
+          "end": 36.98,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 36.98,
+          "end": 37.06,
+          "punctuation": ""
+        },
+        {
+          "word": "大",
+          "start": 37.06,
+          "end": 37.22,
+          "punctuation": ""
+        },
+        {
+          "word": "神",
+          "start": 37.22,
+          "end": 37.3,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 38.5,
+      "end": 38.82,
+      "text": "明白吗",
+      "words": [
+        {
+          "word": "明",
+          "start": 38.5,
+          "end": 38.58,
+          "punctuation": ""
+        },
+        {
+          "word": "白",
+          "start": 38.58,
+          "end": 38.66,
+          "punctuation": ""
+        },
+        {
+          "word": "吗",
+          "start": 38.66,
+          "end": 38.82,
+          "punctuation": "？"
+        }
+      ]
+    },
+    {
+      "start": 39.2,
+      "end": 39.52,
+      "text": "所以说",
+      "words": [
+        {
+          "word": "所",
+          "start": 39.2,
+          "end": 39.36,
+          "punctuation": ""
+        },
+        {
+          "word": "以",
+          "start": 39.36,
+          "end": 39.36,
+          "punctuation": ""
+        },
+        {
+          "word": "说",
+          "start": 39.36,
+          "end": 39.52,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 39.52,
+      "end": 40.720000000000006,
+      "text": "关于活动通过这一块儿",
+      "words": [
+        {
+          "word": "关",
+          "start": 39.52,
+          "end": 39.68,
+          "punctuation": ""
+        },
+        {
+          "word": "于",
+          "start": 39.68,
+          "end": 39.760000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "活",
+          "start": 39.760000000000005,
+          "end": 40.0,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 40.0,
+          "end": 40.160000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "通",
+          "start": 40.160000000000004,
+          "end": 40.32,
+          "punctuation": ""
+        },
+        {
+          "word": "过",
+          "start": 40.32,
+          "end": 40.400000000000006,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 40.400000000000006,
+          "end": 40.480000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "一",
+          "start": 40.480000000000004,
+          "end": 40.480000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "块",
+          "start": 40.480000000000004,
+          "end": 40.64,
+          "punctuation": ""
+        },
+        {
+          "word": "儿",
+          "start": 40.64,
+          "end": 40.720000000000006,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 40.88,
+      "end": 42.0,
+      "text": "我只送给你们四个字",
+      "words": [
+        {
+          "word": "我",
+          "start": 40.88,
+          "end": 40.96,
+          "punctuation": ""
+        },
+        {
+          "word": "只",
+          "start": 40.96,
+          "end": 41.120000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "送",
+          "start": 41.120000000000005,
+          "end": 41.28,
+          "punctuation": ""
+        },
+        {
+          "word": "给",
+          "start": 41.28,
+          "end": 41.28,
+          "punctuation": ""
+        },
+        {
+          "word": "你",
+          "start": 41.36,
+          "end": 41.440000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "们",
+          "start": 41.440000000000005,
+          "end": 41.52,
+          "punctuation": ""
+        },
+        {
+          "word": "四",
+          "start": 41.52,
+          "end": 41.760000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 41.760000000000005,
+          "end": 41.84,
+          "punctuation": ""
+        },
+        {
+          "word": "字",
+          "start": 41.84,
+          "end": 42.0,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 42.72,
+      "end": 43.36,
+      "text": "换位思考",
+      "words": [
+        {
+          "word": "换",
+          "start": 42.72,
+          "end": 42.96,
+          "punctuation": ""
+        },
+        {
+          "word": "位",
+          "start": 42.96,
+          "end": 43.04,
+          "punctuation": ""
+        },
+        {
+          "word": "思",
+          "start": 43.04,
+          "end": 43.199999999999996,
+          "punctuation": ""
+        },
+        {
+          "word": "考",
+          "start": 43.199999999999996,
+          "end": 43.36,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 43.8,
+      "end": 44.44,
+      "text": "如果说",
+      "words": [
+        {
+          "word": "如",
+          "start": 43.8,
+          "end": 44.04,
+          "punctuation": ""
+        },
+        {
+          "word": "果",
+          "start": 44.04,
+          "end": 44.199999999999996,
+          "punctuation": ""
+        },
+        {
+          "word": "说",
+          "start": 44.199999999999996,
+          "end": 44.44,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 44.8,
+      "end": 46.559999999999995,
+      "text": "你要想降低你的试错成本",
+      "words": [
+        {
+          "word": "你",
+          "start": 44.8,
+          "end": 44.959999999999994,
+          "punctuation": ""
+        },
+        {
+          "word": "要",
+          "start": 44.959999999999994,
+          "end": 45.12,
+          "punctuation": ""
+        },
+        {
+          "word": "想",
+          "start": 45.12,
+          "end": 45.36,
+          "punctuation": ""
+        },
+        {
+          "word": "降",
+          "start": 45.44,
+          "end": 45.68,
+          "punctuation": ""
+        },
+        {
+          "word": "低",
+          "start": 45.68,
+          "end": 45.839999999999996,
+          "punctuation": ""
+        },
+        {
+          "word": "你",
+          "start": 45.839999999999996,
+          "end": 46.0,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 46.0,
+          "end": 46.0,
+          "punctuation": ""
+        },
+        {
+          "word": "试",
+          "start": 46.0,
+          "end": 46.239999999999995,
+          "punctuation": ""
+        },
+        {
+          "word": "错",
+          "start": 46.239999999999995,
+          "end": 46.32,
+          "punctuation": ""
+        },
+        {
+          "word": "成",
+          "start": 46.32,
+          "end": 46.48,
+          "punctuation": ""
+        },
+        {
+          "word": "本",
+          "start": 46.559999999999995,
+          "end": 46.559999999999995,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 47.6,
+      "end": 48.4,
+      "text": "今天来这里",
+      "words": [
+        {
+          "word": "今",
+          "start": 47.6,
+          "end": 47.76,
+          "punctuation": ""
+        },
+        {
+          "word": "天",
+          "start": 47.76,
+          "end": 47.92,
+          "punctuation": ""
+        },
+        {
+          "word": "来",
+          "start": 48.08,
+          "end": 48.160000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 48.160000000000004,
+          "end": 48.32,
+          "punctuation": ""
+        },
+        {
+          "word": "里",
+          "start": 48.32,
+          "end": 48.4,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 48.7,
+      "end": 49.34,
+      "text": "你们就是对的",
+      "words": [
+        {
+          "word": "你",
+          "start": 48.7,
+          "end": 48.78,
+          "punctuation": ""
+        },
+        {
+          "word": "们",
+          "start": 48.78,
+          "end": 48.86,
+          "punctuation": ""
+        },
+        {
+          "word": "就",
+          "start": 48.86,
+          "end": 49.02,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 49.02,
+          "end": 49.1,
+          "punctuation": ""
+        },
+        {
+          "word": "对",
+          "start": 49.1,
+          "end": 49.260000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 49.260000000000005,
+          "end": 49.34,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 50.18,
+      "end": 52.02,
+      "text": "因为有畅学畅学卡这个机会",
+      "words": [
+        {
+          "word": "因",
+          "start": 50.18,
+          "end": 50.26,
+          "punctuation": ""
+        },
+        {
+          "word": "为",
+          "start": 50.26,
+          "end": 50.42,
+          "punctuation": ""
+        },
+        {
+          "word": "有",
+          "start": 50.660000000000004,
+          "end": 50.660000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "畅",
+          "start": 50.660000000000004,
+          "end": 50.9,
+          "punctuation": ""
+        },
+        {
+          "word": "学",
+          "start": 50.9,
+          "end": 50.980000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "畅",
+          "start": 51.14,
+          "end": 51.300000000000004,
+          "punctuation": ""
+        },
+        {
+          "word": "学",
+          "start": 51.300000000000004,
+          "end": 51.46,
+          "punctuation": ""
+        },
+        {
+          "word": "卡",
+          "start": 51.46,
+          "end": 51.54,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 51.54,
+          "end": 51.7,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 51.7,
+          "end": 51.78,
+          "punctuation": ""
+        },
+        {
+          "word": "机",
+          "start": 51.78,
+          "end": 51.940000000000005,
+          "punctuation": ""
+        },
+        {
+          "word": "会",
+          "start": 51.940000000000005,
+          "end": 52.02,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 52.5,
+      "end": 52.66,
+      "text": "所以说",
+      "words": [
+        {
+          "word": "所",
+          "start": 52.5,
+          "end": 52.5,
+          "punctuation": ""
+        },
+        {
+          "word": "以",
+          "start": 52.5,
+          "end": 52.58,
+          "punctuation": ""
+        },
+        {
+          "word": "说",
+          "start": 52.58,
+          "end": 52.66,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 52.66,
+      "end": 54.5,
+      "text": "关于活动过于不过这个问题",
+      "words": [
+        {
+          "word": "关",
+          "start": 52.66,
+          "end": 52.82,
+          "punctuation": ""
+        },
+        {
+          "word": "于",
+          "start": 52.82,
+          "end": 52.9,
+          "punctuation": ""
+        },
+        {
+          "word": "活",
+          "start": 52.9,
+          "end": 53.14,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 53.14,
+          "end": 53.22,
+          "punctuation": ""
+        },
+        {
+          "word": "过",
+          "start": 53.22,
+          "end": 53.38,
+          "punctuation": ""
+        },
+        {
+          "word": "于",
+          "start": 53.38,
+          "end": 53.46,
+          "punctuation": ""
+        },
+        {
+          "word": "不",
+          "start": 53.46,
+          "end": 53.54,
+          "punctuation": ""
+        },
+        {
+          "word": "过",
+          "start": 53.62,
+          "end": 53.78,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 54.1,
+          "end": 54.18,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 54.26,
+          "end": 54.26,
+          "punctuation": ""
+        },
+        {
+          "word": "问",
+          "start": 54.26,
+          "end": 54.34,
+          "punctuation": ""
+        },
+        {
+          "word": "题",
+          "start": 54.34,
+          "end": 54.5,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 54.66,
+      "end": 56.18,
+      "text": "或者活动很难通过这个话题",
+      "words": [
+        {
+          "word": "或",
+          "start": 54.66,
+          "end": 54.74,
+          "punctuation": ""
+        },
+        {
+          "word": "者",
+          "start": 54.74,
+          "end": 54.82,
+          "punctuation": ""
+        },
+        {
+          "word": "活",
+          "start": 54.82,
+          "end": 54.98,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 54.98,
+          "end": 55.06,
+          "punctuation": ""
+        },
+        {
+          "word": "很",
+          "start": 55.06,
+          "end": 55.22,
+          "punctuation": ""
+        },
+        {
+          "word": "难",
+          "start": 55.22,
+          "end": 55.38,
+          "punctuation": ""
+        },
+        {
+          "word": "通",
+          "start": 55.38,
+          "end": 55.62,
+          "punctuation": ""
+        },
+        {
+          "word": "过",
+          "start": 55.62,
+          "end": 55.7,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 55.7,
+          "end": 55.78,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 55.78,
+          "end": 55.86,
+          "punctuation": ""
+        },
+        {
+          "word": "话",
+          "start": 55.86,
+          "end": 56.02,
+          "punctuation": ""
+        },
+        {
+          "word": "题",
+          "start": 56.02,
+          "end": 56.18,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 57.16,
+      "end": 58.6,
+      "text": "如果真的要坐下来聊的话",
+      "words": [
+        {
+          "word": "如",
+          "start": 57.16,
+          "end": 57.32,
+          "punctuation": ""
+        },
+        {
+          "word": "果",
+          "start": 57.32,
+          "end": 57.4,
+          "punctuation": ""
+        },
+        {
+          "word": "真",
+          "start": 57.4,
+          "end": 57.48,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 57.48,
+          "end": 57.64,
+          "punctuation": ""
+        },
+        {
+          "word": "要",
+          "start": 57.64,
+          "end": 57.72,
+          "punctuation": ""
+        },
+        {
+          "word": "坐",
+          "start": 57.96,
+          "end": 58.12,
+          "punctuation": ""
+        },
+        {
+          "word": "下",
+          "start": 58.12,
+          "end": 58.2,
+          "punctuation": ""
+        },
+        {
+          "word": "来",
+          "start": 58.2,
+          "end": 58.28,
+          "punctuation": ""
+        },
+        {
+          "word": "聊",
+          "start": 58.28,
+          "end": 58.44,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 58.44,
+          "end": 58.52,
+          "punctuation": ""
+        },
+        {
+          "word": "话",
+          "start": 58.52,
+          "end": 58.6,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 58.6,
+      "end": 59.32,
+      "text": "要聊一天",
+      "words": [
+        {
+          "word": "要",
+          "start": 58.6,
+          "end": 58.76,
+          "punctuation": ""
+        },
+        {
+          "word": "聊",
+          "start": 58.84,
+          "end": 58.92,
+          "punctuation": ""
+        },
+        {
+          "word": "一",
+          "start": 58.92,
+          "end": 59.08,
+          "punctuation": ""
+        },
+        {
+          "word": "天",
+          "start": 59.08,
+          "end": 59.32,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 60.1,
+      "end": 60.26,
+      "text": "但是",
+      "words": [
+        {
+          "word": "但",
+          "start": 60.1,
+          "end": 60.18,
+          "punctuation": ""
+        },
+        {
+          "word": "是",
+          "start": 60.18,
+          "end": 60.26,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 60.26,
+      "end": 60.660000000000004,
+      "text": "我觉得",
+      "words": [
+        {
+          "word": "我",
+          "start": 60.26,
+          "end": 60.42,
+          "punctuation": ""
+        },
+        {
+          "word": "觉",
+          "start": 60.42,
+          "end": 60.5,
+          "punctuation": ""
+        },
+        {
+          "word": "得",
+          "start": 60.5,
+          "end": 60.660000000000004,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 61.0,
+      "end": 61.96,
+      "text": "我刚才说的四个字",
+      "words": [
+        {
+          "word": "我",
+          "start": 61.0,
+          "end": 61.16,
+          "punctuation": ""
+        },
+        {
+          "word": "刚",
+          "start": 61.16,
+          "end": 61.24,
+          "punctuation": ""
+        },
+        {
+          "word": "才",
+          "start": 61.24,
+          "end": 61.32,
+          "punctuation": ""
+        },
+        {
+          "word": "说",
+          "start": 61.32,
+          "end": 61.4,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 61.4,
+          "end": 61.48,
+          "punctuation": ""
+        },
+        {
+          "word": "四",
+          "start": 61.48,
+          "end": 61.72,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 61.72,
+          "end": 61.8,
+          "punctuation": ""
+        },
+        {
+          "word": "字",
+          "start": 61.8,
+          "end": 61.96,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 62.3,
+      "end": 62.459999999999994,
+      "text": "足够",
+      "words": [
+        {
+          "word": "足",
+          "start": 62.3,
+          "end": 62.379999999999995,
+          "punctuation": ""
+        },
+        {
+          "word": "够",
+          "start": 62.379999999999995,
+          "end": 62.459999999999994,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 63.1,
+      "end": 63.26,
+      "text": "好",
+      "words": [
+        {
+          "word": "好",
+          "start": 63.1,
+          "end": 63.26,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 63.26,
+      "end": 63.5,
+      "text": "谢谢",
+      "words": [
+        {
+          "word": "谢",
+          "start": 63.26,
+          "end": 63.42,
+          "punctuation": ""
+        },
+        {
+          "word": "谢",
+          "start": 63.42,
+          "end": 63.5,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 64.0,
+      "end": 64.08,
+      "text": "好",
+      "words": [
+        {
+          "word": "好",
+          "start": 64.0,
+          "end": 64.08,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 64.16,
+      "end": 65.92,
+      "text": "非常感谢那个三胖老师的回答",
+      "words": [
+        {
+          "word": "非",
+          "start": 64.16,
+          "end": 64.24,
+          "punctuation": ""
+        },
+        {
+          "word": "常",
+          "start": 64.24,
+          "end": 64.4,
+          "punctuation": ""
+        },
+        {
+          "word": "感",
+          "start": 64.4,
+          "end": 64.48,
+          "punctuation": ""
+        },
+        {
+          "word": "谢",
+          "start": 64.48,
+          "end": 64.72,
+          "punctuation": ""
+        },
+        {
+          "word": "那",
+          "start": 64.72,
+          "end": 64.88,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 64.88,
+          "end": 64.96,
+          "punctuation": ""
+        },
+        {
+          "word": "三",
+          "start": 65.04,
+          "end": 65.12,
+          "punctuation": ""
+        },
+        {
+          "word": "胖",
+          "start": 65.12,
+          "end": 65.28,
+          "punctuation": ""
+        },
+        {
+          "word": "老",
+          "start": 65.28,
+          "end": 65.36,
+          "punctuation": ""
+        },
+        {
+          "word": "师",
+          "start": 65.36,
+          "end": 65.44,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 65.44,
+          "end": 65.52,
+          "punctuation": ""
+        },
+        {
+          "word": "回",
+          "start": 65.52,
+          "end": 65.68,
+          "punctuation": ""
+        },
+        {
+          "word": "答",
+          "start": 65.68,
+          "end": 65.92,
+          "punctuation": "。"
+        }
+      ]
+    },
+    {
+      "start": 65.92,
+      "end": 66.56,
+      "text": "三胖老师说",
+      "words": [
+        {
+          "word": "三",
+          "start": 65.92,
+          "end": 66.08,
+          "punctuation": ""
+        },
+        {
+          "word": "胖",
+          "start": 66.08,
+          "end": 66.16,
+          "punctuation": ""
+        },
+        {
+          "word": "老",
+          "start": 66.16,
+          "end": 66.24,
+          "punctuation": ""
+        },
+        {
+          "word": "师",
+          "start": 66.32,
+          "end": 66.32,
+          "punctuation": ""
+        },
+        {
+          "word": "说",
+          "start": 66.32,
+          "end": 66.56,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 66.56,
+      "end": 68.8,
+      "text": "我们在整个店铺的这个活动当中",
+      "words": [
+        {
+          "word": "我",
+          "start": 66.56,
+          "end": 66.64,
+          "punctuation": ""
+        },
+        {
+          "word": "们",
+          "start": 66.64,
+          "end": 66.72,
+          "punctuation": ""
+        },
+        {
+          "word": "在",
+          "start": 67.12,
+          "end": 67.36,
+          "punctuation": ""
+        },
+        {
+          "word": "整",
+          "start": 67.36,
+          "end": 67.52,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 67.52,
+          "end": 67.68,
+          "punctuation": ""
+        },
+        {
+          "word": "店",
+          "start": 67.68,
+          "end": 67.84,
+          "punctuation": ""
+        },
+        {
+          "word": "铺",
+          "start": 67.84,
+          "end": 67.92,
+          "punctuation": ""
+        },
+        {
+          "word": "的",
+          "start": 67.92,
+          "end": 68.0,
+          "punctuation": ""
+        },
+        {
+          "word": "这",
+          "start": 68.0,
+          "end": 68.08,
+          "punctuation": ""
+        },
+        {
+          "word": "个",
+          "start": 68.08,
+          "end": 68.16,
+          "punctuation": ""
+        },
+        {
+          "word": "活",
+          "start": 68.16,
+          "end": 68.32,
+          "punctuation": ""
+        },
+        {
+          "word": "动",
+          "start": 68.32,
+          "end": 68.48,
+          "punctuation": ""
+        },
+        {
+          "word": "当",
+          "start": 68.48,
+          "end": 68.64,
+          "punctuation": ""
+        },
+        {
+          "word": "中",
+          "start": 68.64,
+          "end": 68.8,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 68.8,
+      "end": 70.0,
+      "text": "我们要学会换位思考",
+      "words": [
+        {
+          "word": "我",
+          "start": 68.8,
+          "end": 68.88,
+          "punctuation": ""
+        },
+        {
+          "word": "们",
+          "start": 68.88,
+          "end": 68.96,
+          "punctuation": ""
+        },
+        {
+          "word": "要",
+          "start": 68.96,
+          "end": 69.04,
+          "punctuation": ""
+        },
+        {
+          "word": "学",
+          "start": 69.04,
+          "end": 69.12,
+          "punctuation": ""
+        },
+        {
+          "word": "会",
+          "start": 69.12,
+          "end": 69.28,
+          "punctuation": ""
+        },
+        {
+          "word": "换",
+          "start": 69.28,
+          "end": 69.44,
+          "punctuation": ""
+        },
+        {
+          "word": "位",
+          "start": 69.44,
+          "end": 69.6,
+          "punctuation": ""
+        },
+        {
+          "word": "思",
+          "start": 69.6,
+          "end": 69.76,
+          "punctuation": ""
+        },
+        {
+          "word": "考",
+          "start": 69.76,
+          "end": 70.0,
+          "punctuation": "，"
+        }
+      ]
+    },
+    {
+      "start": 70.0,
+      "end": 70.24,
+      "text": "其实",
+      "words": [
+        {
+          "word": "其",
+          "start": 70.0,
+          "end": 70.08,
+          "punctuation": ""
+        },
+        {
+          "word": "实",
+          "start": 70.08,
+          "end": 70.24,
+          "punctuation": "。"
+        }
+      ]
+    }
+  ],
+  "highlights": []
+}

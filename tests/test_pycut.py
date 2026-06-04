@@ -18,15 +18,21 @@ import pytest
 # Add repository root to path
 
 
-def test_runtime_guard_rejects_non_macos_apple_silicon(monkeypatch):
-    """VideoClipper should fail fast outside macOS Apple Silicon."""
+def test_runtime_guard_accepts_linux_and_rejects_unsupported_systems(monkeypatch):
+    """VideoClipper should support Linux/Windows and reject unsupported runtimes."""
     import pycut.config as config
     from pycut.clipper import VideoClipper
 
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
     monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
 
-    with pytest.raises(RuntimeError, match="macOS Apple Silicon"):
+    clipper = VideoClipper(gemini_api_key=None)
+    assert clipper.asr_backend == "qwen"
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+
+    with pytest.raises(RuntimeError, match="macOS Apple Silicon, Linux, and Windows"):
         VideoClipper(gemini_api_key=None)
 
 
@@ -106,12 +112,14 @@ def test_video_clipper_uses_google_translator_service(monkeypatch):
     assert clipper.translate_text("hello", source_lang="en", target_lang="zh-cn") == "你好"
 
 
-def test_asr_module_exposes_mlx_helpers():
-    """ASR helpers should live in the extracted MLX-focused module."""
+def test_asr_module_exposes_system_asr_helpers():
+    """ASR helpers should expose both system-selected backends."""
     import pycut.asr as asr
 
     assert hasattr(asr, "MLXASRHelper")
+    assert hasattr(asr, "QwenASRHelper")
     assert hasattr(asr, "load_mlx_stt_model")
+    assert hasattr(asr, "load_qwen_asr_model")
 
 
 def test_package_metadata_declares_runtime_dependencies_used_by_source():
@@ -125,6 +133,67 @@ def test_package_metadata_declares_runtime_dependencies_used_by_source():
 
     assert "numpy" in dependency_names
     assert "soundfile" in dependency_names
+    assert "qwen-asr" in dependency_names
+    assert "voxcpm" in dependency_names
+
+
+def _write_hf_snapshot(cache_root, repo_id, commit="abc123", files=None):
+    repo_dir = cache_root / ("models--" + repo_id.replace("/", "--"))
+    snapshot = repo_dir / "snapshots" / commit
+    (repo_dir / "refs").mkdir(parents=True)
+    snapshot.mkdir(parents=True)
+    (repo_dir / "refs" / "main").write_text(commit, encoding="utf-8")
+    for name, content in (files or {}).items():
+        path = snapshot / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return snapshot
+
+
+def test_resolve_default_qwen_asr_prefers_complete_cached_snapshot(monkeypatch, tmp_path):
+    """Incomplete 1.7B cache should fall back to the complete cached 0.6B model."""
+    import pycut.config as config
+
+    cache_root = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache_root))
+
+    _write_hf_snapshot(
+        cache_root,
+        "Qwen/Qwen3-ASR-1.7B",
+        files={
+            "config.json": b"{}",
+            "model.safetensors.index.json": b'{"weight_map": {"a": "model-00001-of-00002.safetensors"}}',
+        },
+    )
+    fallback_snapshot = _write_hf_snapshot(
+        cache_root,
+        "Qwen/Qwen3-ASR-0.6B",
+        files={
+            "config.json": b"{}",
+            "model.safetensors": b"weights",
+        },
+    )
+
+    assert config.resolve_hf_cached_snapshot("Qwen/Qwen3-ASR-1.7B") is None
+    assert config.resolve_default_qwen_asr_model() == str(fallback_snapshot)
+
+
+def test_resolve_model_path_returns_complete_cached_snapshot(monkeypatch, tmp_path):
+    """Repo ids should resolve to local snapshot paths when the cache is complete."""
+    import pycut.config as config
+
+    cache_root = tmp_path / "hub"
+    monkeypatch.setenv("HF_HUB_CACHE", str(cache_root))
+    snapshot = _write_hf_snapshot(
+        cache_root,
+        "openbmb/VoxCPM2",
+        files={
+            "config.json": b"{}",
+            "model.safetensors": b"weights",
+        },
+    )
+
+    assert config.resolve_model_path("openbmb/VoxCPM2") == str(snapshot)
 
 
 def test_expand_video_inputs_treats_existing_bracketed_media_path_as_literal_file(tmp_path):
@@ -150,15 +219,20 @@ def test_asr_loader_surface_omits_legacy_runtime_knobs():
         "use_vllm",
     }
 
-    assert asr.__all__ == ["MLXASRHelper", "load_mlx_stt_model"]
+    assert asr.__all__ == ["MLXASRHelper", "QwenASRHelper", "load_mlx_stt_model", "load_qwen_asr_model"]
     assert legacy_knobs.isdisjoint(asr.__all__)
     assert legacy_knobs.isdisjoint(inspect.signature(asr.MLXASRHelper).parameters)
+    assert legacy_knobs.isdisjoint(inspect.signature(asr.QwenASRHelper).parameters)
     assert legacy_knobs.isdisjoint(inspect.signature(asr.load_mlx_stt_model).parameters)
+    assert legacy_knobs.isdisjoint(inspect.signature(asr.load_qwen_asr_model).parameters)
     assert legacy_knobs.isdisjoint(inspect.signature(asr.MLXASRHelper.load_models).parameters)
     assert legacy_knobs.isdisjoint(inspect.signature(asr.MLXASRHelper.load_vad_model).parameters)
 
     with pytest.raises(TypeError, match="device"):
         asr.load_mlx_stt_model("mlx-community/whisper-tiny", device="cpu")
+
+    with pytest.raises(TypeError, match="device"):
+        asr.load_qwen_asr_model("Qwen/Qwen3-ASR-1.7B", device="cpu")
 
     with pytest.raises(TypeError, match="use_vllm"):
         asr.MLXASRHelper(
@@ -516,6 +590,59 @@ def test_mlx_asr_helper_skips_alignment_when_disabled(monkeypatch):
     assert segments[0].words == []
 
 
+def test_qwen_asr_helper_generates_text_and_alignment(monkeypatch):
+    """Qwen helper should adapt Qwen transcribe results into shared segments."""
+    import pycut.asr as asr
+
+    events = []
+
+    class FakeQwenModel:
+        def __init__(self, with_aligner=False):
+            self.with_aligner = with_aligner
+
+        def transcribe(self, *, audio, language=None, return_time_stamps=False):
+            events.append(
+                {
+                    "audio": audio,
+                    "language": language,
+                    "return_time_stamps": return_time_stamps,
+                    "with_aligner": self.with_aligner,
+                }
+            )
+            if return_time_stamps:
+                stamps = types.SimpleNamespace(
+                    items=[
+                        types.SimpleNamespace(text="hello", start_time=0.0, end_time=0.4),
+                        types.SimpleNamespace(text="world", start_time=0.4, end_time=0.9),
+                    ]
+                )
+                return [types.SimpleNamespace(text="hello world", time_stamps=stamps)]
+            return [types.SimpleNamespace(text="hello world")]
+
+    def fake_load(model_name, **kwargs):
+        return FakeQwenModel(with_aligner=bool(kwargs.get("forced_aligner")))
+
+    monkeypatch.setattr(asr, "load_qwen_asr_model", fake_load)
+
+    helper = asr.QwenASRHelper(
+        asr_model_path="Qwen/Qwen3-ASR-1.7B",
+        aligner_model_path="Qwen/Qwen3-ForcedAligner-0.6B",
+        filter_fillers=True,
+        enable_align=True,
+    )
+
+    segments = helper.transcribe_audio("fake.wav", source_lang="en", get_audio_duration=lambda _: 1.0)
+
+    assert [seg.text for seg in segments] == ["hello world"]
+    assert segments[0].words[0]["word"] == "hello"
+    assert helper.asr_model is None
+    assert helper._qwen_aligner is None
+    assert events == [
+        {"audio": "fake.wav", "language": "English", "return_time_stamps": False, "with_aligner": False},
+        {"audio": "fake.wav", "language": "English", "return_time_stamps": True, "with_aligner": True},
+    ]
+
+
 def test_video_clipper_signature_omits_legacy_backend_device_options():
     """Mac-only runtime should not expose legacy backend/device knobs."""
     from pycut.clipper import VideoClipper
@@ -597,6 +724,116 @@ def test_cli_help_omits_legacy_backend_device_options(monkeypatch, capsys):
     assert "--use-vllm" not in help_output
     assert "--gpu-memory-utilization" not in help_output
     assert "--max-model-len" not in help_output
+
+
+def test_tts_cli_synthesizes_inline_text(monkeypatch, tmp_path):
+    """pycut tts should route text generation through the TTS helper."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(config, "resolve_default_voxcpm_tts_model", lambda: config.DEFAULT_VOXCPM_TTS_MODEL)
+
+    seen = {}
+
+    def fake_synthesize_text_to_wav(**kwargs):
+        seen.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
+
+    output = tmp_path / "voice.wav"
+    result = cli_module.main(["tts", "--text", "hello", "--output", str(output)])
+
+    assert result == {"tts": str(output)}
+    assert seen["text"] == "hello"
+    assert seen["model_path"] == config.DEFAULT_VOXCPM_TTS_MODEL
+
+
+def test_tts_cli_synthesizes_text_file(monkeypatch, tmp_path):
+    """pycut tts should read UTF-8 text files."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(config, "resolve_default_mlx_tts_model", lambda: config.DEFAULT_MLX_TTS_MODEL)
+
+    text_file = tmp_path / "input.txt"
+    text_file.write_text("你好\n", encoding="utf-8")
+    output = tmp_path / "voice.wav"
+    seen = {}
+
+    def fake_synthesize_text_to_wav(**kwargs):
+        seen.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
+
+    result = cli_module.main(["tts", "--text-file", str(text_file), "--output", str(output)])
+
+    assert result == {"tts": str(output)}
+    assert seen["text"] == "你好"
+    assert seen["model_path"] == config.DEFAULT_MLX_TTS_MODEL
+
+
+def test_mlx_tts_helper_joins_chunks_and_writes_wav(monkeypatch):
+    """MLX TTS helper should join generated chunks into one WAV."""
+    import numpy as np
+    import pycut.tts as tts
+
+    class FakeResult:
+        def __init__(self, audio):
+            self.audio = np.asarray(audio, dtype=np.float32)
+            self.sample_rate = 22050
+
+    class FakeModel:
+        def generate(self, text, **kwargs):
+            assert text == "hello"
+            assert kwargs["voice"] == "Chelsie"
+            yield FakeResult([0.1, 0.2])
+            yield FakeResult([0.3])
+
+    written = {}
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_write_wav", lambda output_path, audio, sample_rate: written.update({
+        "output_path": output_path,
+        "audio": list(audio),
+        "sample_rate": sample_rate,
+    }) or output_path)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    assert helper.synthesize(text="hello", output_path="out.wav") == "out.wav"
+    assert written == {"output_path": "out.wav", "audio": [0.1, 0.2, 0.3], "sample_rate": 22050}
+
+
+def test_voxcpm_tts_helper_writes_generated_audio(monkeypatch):
+    """VoxCPM TTS helper should write generated audio with model sample rate."""
+    import numpy as np
+    import pycut.tts as tts
+
+    class FakeModel:
+        tts_model = types.SimpleNamespace(sample_rate=24000)
+
+        def generate(self, **kwargs):
+            assert kwargs["text"] == "hello"
+            assert kwargs["cfg_value"] == 2.0
+            return np.asarray([0.1, -0.1], dtype=np.float32)
+
+    written = {}
+    monkeypatch.setattr(tts.VoxCPMTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_write_wav", lambda output_path, audio, sample_rate: written.update({
+        "output_path": output_path,
+        "audio": list(audio),
+        "sample_rate": sample_rate,
+    }) or output_path)
+
+    helper = tts.VoxCPMTTSHelper(model_path="fake")
+
+    assert helper.synthesize(text="hello", output_path="out.wav") == "out.wav"
+    assert written == {"output_path": "out.wav", "audio": [0.1, -0.1], "sample_rate": 24000}
 
 
 def test_create_gemini_client_returns_none_without_api_key():
@@ -906,8 +1143,8 @@ def test_transcribe_with_vad_reports_soundfile_install_guidance(monkeypatch):
         helper.transcribe_with_vad("fake.wav")
 
 
-def test_dependency_checks_omit_legacy_non_mac_paths():
-    """Dependency helper checks should only encode the supported macOS Apple Silicon path."""
+def test_dependency_checks_omit_legacy_vllm_cuda_paths():
+    """Dependency helper checks should not reintroduce legacy vLLM/CUDA runtime knobs."""
     legacy_free_sources = [
         inspect.getsource(_check_imports),
         inspect.getsource(_check_runtime_backend),
@@ -916,14 +1153,10 @@ def test_dependency_checks_omit_legacy_non_mac_paths():
     ]
     combined_source = "\n".join(legacy_free_sources)
 
-    assert "import torch" not in combined_source
-    assert "qwen_asr" not in combined_source
-    assert "transformers" not in combined_source
     assert "CUDA" not in combined_source
     assert "torch.cuda" not in combined_source
     assert "AutoConfig" not in combined_source
     assert "google/translategemma-4b-it" not in combined_source
-    assert "pip install torch qwen-asr transformers" not in combined_source
 
 
 def _is_apple_silicon():
@@ -1615,17 +1848,16 @@ def test_process_video_no_clip_without_highlight_skips_keyword_extraction(monkey
     assert keyword_calls == [], "extract_keywords_for_segments should NOT have been called"
 
 
-def test_cli_exposes_highlight_flag():
+def test_cli_exposes_highlight_flag(monkeypatch, capsys):
     """CLI should expose a --highlight flag."""
-    import subprocess
-    from pathlib import Path
-    repo_root = str(Path(__file__).resolve().parent.parent)
-    result = subprocess.run(
-        ["uv", "run", "--prerelease=allow", "python", "-m", "pycut", "--help"],
-        capture_output=True, text=True,
-        cwd=repo_root,
-    )
-    assert "--highlight" in result.stdout, f"--highlight not in help output:\n{result.stdout}"
+    import pycut.cli as cli_module
+
+    monkeypatch.setattr(sys, "argv", ["pycut", "--help"])
+
+    with pytest.raises(SystemExit, match="0"):
+        cli_module.main()
+
+    assert "--highlight" in capsys.readouterr().out
 
 
 def test_main_passes_enable_highlight_to_process_video(monkeypatch):
@@ -1745,16 +1977,26 @@ def test_main_passes_subtitle_colors_to_process_video(monkeypatch):
     assert calls.get("highlight_subtitle_color") == "#778899"
 
 
-def test_cli_resolves_default_asr_model_from_source_language():
+def test_cli_resolves_default_asr_model_from_source_language(monkeypatch):
     """CLI should map source language families to the expected default ASR model."""
     import pycut.cli as cli_module
     import pycut.config as config_module
+
+    monkeypatch.setattr(config_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "arm64")
 
     assert cli_module._resolve_default_asr_model("en") == config_module.DEFAULT_EN_ASR_MODEL
     assert cli_module._resolve_default_asr_model("en-US") == config_module.DEFAULT_EN_ASR_MODEL
     assert cli_module._resolve_default_asr_model("zh") == config_module.DEFAULT_CHINESE_ASR_MODEL
     assert cli_module._resolve_default_asr_model("zh-CN") == config_module.DEFAULT_CHINESE_ASR_MODEL
     assert cli_module._resolve_default_asr_model("ja") == config_module.DEFAULT_FALLBACK_ASR_MODEL
+
+    monkeypatch.setattr(config_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(config_module, "resolve_default_qwen_asr_model", lambda: config_module.DEFAULT_QWEN_ASR_MODEL)
+
+    assert cli_module._resolve_default_asr_model("en") == config_module.DEFAULT_QWEN_ASR_MODEL
+    assert cli_module._resolve_default_asr_model("zh") == config_module.DEFAULT_QWEN_ASR_MODEL
 
 
 def test_cli_resolves_default_output_dir_from_source_stem():
@@ -1929,10 +2171,14 @@ def test_cli_respects_explicit_output_dir_and_asr_model(monkeypatch):
     assert seen["process_video"]["output_dir"] == "/tmp/custom-output"
 
 
-def test_cli_help_mentions_dynamic_defaults():
+def test_cli_help_mentions_dynamic_defaults(monkeypatch):
     """CLI source should define help text for the dynamic defaults."""
     import pycut.cli as cli_module
     import pycut.config as config_module
+
+    monkeypatch.setattr(config_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config_module.platform, "machine", lambda: "arm64")
+
     source = inspect.getsource(cli_module)
     config_source = inspect.getsource(config_module)
 
@@ -1998,3 +2244,41 @@ def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
     assert r"{\c&H00998877&\fscx110\fscy110}world{\r}" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,TranslationTop" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,OriginalBottom" in content
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_fixture_vad_example_matches_expected_transcript():
+    """Optional real-model smoke test for the provided VAD fixture."""
+    if os.environ.get("PYCUT_RUN_INTEGRATION") != "1":
+        pytest.skip("set PYCUT_RUN_INTEGRATION=1 to run real-model fixture tests")
+
+    import difflib
+    import re
+
+    from pycut.clipper import VideoClipper
+
+    fixture_dir = Path(__file__).parent / "fixtures"
+    audio_path = fixture_dir / "vad_example.wav"
+    txt_path = fixture_dir / "vad_example.txt"
+    assert audio_path.exists()
+    assert txt_path.exists()
+
+    clipper = VideoClipper(gemini_api_key=None, max_chars=30)
+    segments = clipper.transcribe_audio(str(audio_path), source_lang="zh")
+
+    assert segments
+    prev_end = 0.0
+    for segment in segments:
+        assert 0.0 <= segment.start <= segment.end <= 70.48
+        assert segment.start >= prev_end or segment.start == pytest.approx(prev_end, abs=0.5)
+        prev_end = max(prev_end, segment.end)
+
+    def normalize(text):
+        return re.sub(r"[\s，。！？、,.!?;；:：]+", "", text)
+
+    actual = normalize("".join(seg.text for seg in segments))
+    expected = normalize(txt_path.read_text(encoding="utf-8"))
+    ratio = difflib.SequenceMatcher(None, actual, expected).ratio()
+
+    assert ratio >= 0.65, f"transcript similarity too low: {ratio:.2f}"
