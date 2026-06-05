@@ -140,6 +140,16 @@ pycut my_video.mp4 \
 | `txt` | 纯文本转录 |
 | `json` | 可供 `--transcript` 复用的时间戳转录 JSON |
 
+## TTS 命令
+
+`pycut tts` 独立于视频剪辑流程，用于生成 WAV 语音文件：
+
+```bash
+pycut tts --text "你好，pycut" --output voice.wav
+pycut tts --text-file script.txt --output voice.wav
+pycut tts --text "使用克隆声音生成这句话" --reference-audio reference.wav --prompt-text "参考音频对应文本" --output voice.wav
+```
+
 ## 示例
 
 竖屏双语短视频：

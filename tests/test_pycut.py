@@ -868,6 +868,39 @@ def test_mlx_tts_helper_joins_chunks_and_writes_wav(monkeypatch):
     assert written == {"output_path": "out.wav", "audio": [0.1, 0.2, 0.3], "sample_rate": 22050}
 
 
+def test_mlx_tts_helper_passes_voice_clone_options(monkeypatch):
+    """MLX TTS helper should pass voice cloning options to mlx_audio."""
+    import numpy as np
+    import pycut.tts as tts
+
+    seen = {}
+
+    class FakeResult:
+        audio = np.asarray([0.1], dtype=np.float32)
+        sample_rate = 24000
+
+    class FakeModel:
+        def generate(self, text, **kwargs):
+            seen["text"] = text
+            seen.update(kwargs)
+            yield FakeResult()
+
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_write_wav", lambda output_path, audio, sample_rate: output_path)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    assert helper.synthesize(
+        text="target",
+        output_path="out.wav",
+        reference_audio="reference.wav",
+        prompt_text="reference transcript",
+    ) == "out.wav"
+    assert seen["text"] == "target"
+    assert seen["ref_audio"] == "reference.wav"
+    assert seen["ref_text"] == "reference transcript"
+
+
 def test_voxcpm_tts_helper_writes_generated_audio(monkeypatch):
     """VoxCPM TTS helper should write generated audio with model sample rate."""
     import numpy as np

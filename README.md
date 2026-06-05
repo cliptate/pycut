@@ -243,6 +243,7 @@ Supported media extensions:
 ```bash
 pycut tts --text "Hello from pycut" --output voice.wav
 pycut tts --text-file script.txt --output voice.wav
+pycut tts --text "Hello in the cloned voice" --reference-audio reference.wav --prompt-text "Reference transcript" --output voice.wav
 ```
 
 Default TTS models:

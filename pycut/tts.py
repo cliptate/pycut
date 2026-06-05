@@ -50,6 +50,9 @@ class MLXTTSHelper:
         voice: str = "Chelsie",
         lang_code: Optional[str] = None,
         speed: Optional[float] = None,
+        reference_audio: Optional[str] = None,
+        prompt_audio: Optional[str] = None,
+        prompt_text: Optional[str] = None,
         normalize: bool = False,
         **_: object,
     ) -> str:
@@ -61,6 +64,11 @@ class MLXTTSHelper:
             kwargs["speed"] = speed
         if normalize:
             kwargs["normalize"] = normalize
+        ref_audio = reference_audio or prompt_audio
+        if ref_audio:
+            kwargs["ref_audio"] = ref_audio
+        if prompt_text:
+            kwargs["ref_text"] = prompt_text
 
         chunks = []
         sample_rate = None
