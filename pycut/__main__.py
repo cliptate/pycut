@@ -1,6 +1,8 @@
 """Allow `python -m pycut` invocation."""
 
-from pycut.cli import main
+import sys
+
+from pycut.cli import console_main
 
 if __name__ == "__main__":
-    main()
+    sys.exit(console_main())

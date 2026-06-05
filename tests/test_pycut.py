@@ -751,6 +751,65 @@ def test_tts_cli_synthesizes_inline_text(monkeypatch, tmp_path):
     assert seen["model_path"] == config.DEFAULT_VOXCPM_TTS_MODEL
 
 
+def test_tts_console_main_returns_zero_on_success(monkeypatch, tmp_path, capsys):
+    """The console entry point should not pass a success result dict to sys.exit."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(config, "resolve_default_voxcpm_tts_model", lambda: config.DEFAULT_VOXCPM_TTS_MODEL)
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", lambda **kwargs: kwargs["output_path"])
+
+    output = tmp_path / "voice.wav"
+
+    assert cli_module.console_main(["tts", "--text", "hello", "--output", str(output)]) == 0
+    assert capsys.readouterr().err == ""
+
+
+def test_tts_console_main_reports_runtime_errors_without_traceback(monkeypatch, tmp_path, capsys):
+    """TTS backend failures should produce a concise CLI error and exit non-zero."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(config, "resolve_default_voxcpm_tts_model", lambda: config.DEFAULT_VOXCPM_TTS_MODEL)
+
+    def fake_synthesize_text_to_wav(**kwargs):
+        raise RuntimeError("TTS backend failed")
+
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
+
+    output = tmp_path / "voice.wav"
+
+    assert cli_module.console_main(["tts", "--text", "hello", "--output", str(output)]) == 1
+    captured = capsys.readouterr()
+    assert "TTS backend failed" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_clip_console_main_returns_zero_after_successful_processing(monkeypatch):
+    """Writing transcript/output results should not make the console script exit non-zero."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
+
+    class FakeVideoClipper:
+        def __init__(self, **kwargs):
+            pass
+
+        def process_video(self, **kwargs):
+            return {"transcript": "/tmp/demo_transcript.json"}
+
+    monkeypatch.setattr(cli_module, "VideoClipper", FakeVideoClipper)
+    monkeypatch.setattr(cli_module, "_expand_video_inputs", lambda inputs: ["/tmp/demo.mp4"])
+
+    assert cli_module.console_main(["--format", "json", "/tmp/demo.mp4"]) == 0
+
+
 def test_tts_cli_synthesizes_text_file(monkeypatch, tmp_path):
     """pycut tts should read UTF-8 text files."""
     import pycut.cli as cli_module
@@ -834,6 +893,25 @@ def test_voxcpm_tts_helper_writes_generated_audio(monkeypatch):
 
     assert helper.synthesize(text="hello", output_path="out.wav") == "out.wav"
     assert written == {"output_path": "out.wav", "audio": [0.1, -0.1], "sample_rate": 24000}
+
+
+def test_voxcpm_tts_helper_wraps_binary_import_errors(monkeypatch):
+    """A torch/torchaudio ABI failure during voxcpm import should be actionable."""
+    import pycut.tts as tts
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "voxcpm":
+            raise OSError("libtorchaudio undefined symbol")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    helper = tts.VoxCPMTTSHelper(model_path="fake")
+
+    with pytest.raises(RuntimeError, match="working voxcpm, torch, and torchaudio"):
+        helper.load_model()
 
 
 def test_create_gemini_client_returns_none_without_api_key():

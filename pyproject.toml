@@ -18,11 +18,13 @@ dependencies = [
     "qwen-asr>=0.0.6; sys_platform == 'linux' or sys_platform == 'win32'",
     "silero-vad>=6.2.1",
     "soundfile>=0.12.1",
+    "torch==2.10.*; sys_platform == 'linux' or sys_platform == 'win32'",
+    "torchaudio==2.10.*; sys_platform == 'linux' or sys_platform == 'win32'",
     "voxcpm>=2.0.3; sys_platform == 'linux' or sys_platform == 'win32'",
 ]
 
 [project.scripts]
-pycut = "pycut.cli:main"
+pycut = "pycut.cli:console_main"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

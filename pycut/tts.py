@@ -31,8 +31,11 @@ class MLXTTSHelper:
             return
         try:
             from mlx_audio.tts.utils import load_model
-        except ImportError as exc:
-            raise RuntimeError("macOS TTS requires mlx-audio. Install with: pip install mlx-audio") from exc
+        except (ImportError, OSError) as exc:
+            raise RuntimeError(
+                "macOS TTS requires a working mlx-audio install. "
+                f"Original error: {exc}"
+            ) from exc
 
         resolved_model_path = config.resolve_model_path(self.model_path)
         print(f"📝 Loading MLX TTS model from {resolved_model_path}...")
@@ -104,8 +107,11 @@ class VoxCPMTTSHelper:
             return
         try:
             from voxcpm import VoxCPM
-        except ImportError as exc:
-            raise RuntimeError("Linux/Windows TTS requires voxcpm. Install with: pip install voxcpm") from exc
+        except (ImportError, OSError) as exc:
+            raise RuntimeError(
+                "Linux/Windows TTS requires a working voxcpm, torch, and torchaudio install. "
+                f"Original error: {exc}"
+            ) from exc
 
         resolved_model_path = config.resolve_model_path(self.model_path)
         print(f"📝 Loading VoxCPM TTS model from {resolved_model_path}...")

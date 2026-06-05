@@ -305,5 +305,14 @@ def main(argv: list[str] | None = None):
     return _run_clip(resolved_argv)
 
 
+def console_main(argv: list[str] | None = None) -> int:
+    try:
+        main(argv)
+    except RuntimeError as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(console_main())
