@@ -118,6 +118,7 @@ pycut my_video.mp4 \
 | --- | --- | --- |
 | `--transcript` | 无 | 复用已有转录 JSON，跳过 ASR |
 | `--format` | `srt` | 输出格式，支持 `ass,srt,fcpxml,video,txt,json` |
+| `--no-align` | 关闭 | 跳过强制时间对齐，使用分段级时间戳 |
 | `--api-key` | 环境变量或无 | OpenAI 兼容 API Key |
 | `--no-clip` | 关闭 | 不做 AI 高光裁剪，保留完整字幕时间线 |
 | `--highlight` | 关闭 | 在 `--no-clip` 模式下做关键词高亮 |

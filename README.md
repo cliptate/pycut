@@ -182,6 +182,7 @@ Supported media extensions:
 | --- | --- | --- |
 | `--asr-model` | auto by source language | `en` uses Parakeet, `zh*` uses Qwen3 ASR, others use Whisper Large v3 Turbo |
 | `--aligner-model` | auto by system | macOS uses MLX Qwen3 aligner; Linux/Windows use `Qwen/Qwen3-ForcedAligner-0.6B` |
+| `--no-align` | off | Skip forced alignment and use segment-level timestamps |
 | `--segment-duration` | `300` | Audio chunk size in seconds for long media |
 | `--no-filter-fillers` | off | Keep filler words such as `um` / `uh` |
 
