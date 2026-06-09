@@ -1,17 +1,16 @@
 # pycut
 
-> 面向 Apple Silicon Mac 的 AI 自动剪辑工具。
+> 本地视频/音频转录、字幕、时间线、渲染与语音工具。
 
 **语言：** [English](README.md) | [中文](README.zh-CN.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-`pycut` 可以把长视频或音频自动转录、用兼容 OpenAI 的大模型提取高光片段，并导出字幕、时间线或烧录视频，全部通过一条命令完成。
+`pycut` 可以在本地转录长视频或音频，导出字幕和剪辑时间线，渲染烧录字幕的视频，并提供独立的文字转语音命令。
 
 ## 功能
 
-- 基于 MLX 的本地 ASR，针对 Apple Silicon 优化
-- AI 自动提取精彩片段并生成标题
+- 按系统自动选择本地 ASR：Apple Silicon 使用 MLX，Linux/Windows 使用 Qwen3-ASR
+- 独立的 `pycut tts` 命令，可生成 WAV 语音
 - 支持翻译与双语字幕布局
-- 支持字幕关键词高亮
 - 支持 `srt`、`ass`、`fcpxml`、`video`、`txt`、`json`
 - 支持横屏和竖屏输出
 - 可复用转录 JSON，跳过重复 ASR
@@ -21,83 +20,41 @@
 
 | 项目 | 要求 |
 | --- | --- |
-| 操作系统 | macOS Apple Silicon（`arm64` / `aarch64`） |
+| 操作系统 | macOS Apple Silicon（`arm64` / `aarch64`）、Linux 或 Windows |
 | Python | 3.12+ |
 | FFmpeg | 已安装并可在 `PATH` 中找到 |
-| API Key | 仅在 AI 裁剪、关键词高亮或转录纠错时需要 |
 
-`pycut` 当前仅支持 macOS + Apple Silicon，不支持 Intel Mac 或其他系统。
+ASR/TTS 模型会根据当前系统自动选择。Intel Mac 和不支持的系统会在运行时被拒绝。
 
 ## 安装
 
-### 1. 安装 FFmpeg
+安装 FFmpeg：
 
 ```bash
 brew install ffmpeg
 ```
 
-### 2. 安装 `pycut`
-
-日常使用推荐直接安装命令行工具：
+安装 `pycut`：
 
 ```bash
 uv tool install https://github.com/cliptate/pycut.git
 ```
 
-安装完成后可直接使用：
-
-```bash
-pycut --help
-```
-
-后续更新时，继续使用 `uv tool` 重新安装或升级即可。
-
-`pycut` 会根据包元数据安装 Python 运行时依赖，其中包括 VAD 转录所需的 `soundfile`。如果旧的工具环境里缺少它，重新安装工具，或执行 `uv tool install --reinstall https://github.com/cliptate/pycut.git`。
-
-### 3. 克隆仓库用于本地开发
-
-如果你要调试、修改代码或运行测试，克隆仓库更合适：
+本地开发：
 
 ```bash
 git clone https://github.com/cliptate/pycut.git
 cd pycut
 uv sync
-```
-
-然后在仓库目录内运行：
-
-```bash
 uv run pycut --help
-```
-
-## 配置 API Key
-
-```bash
-export OPENAI_API_KEY="your_api_key_here"
-```
-
-也可以在运行时传入 `--api-key`。如果使用 Gemini、DeepSeek 等兼容 OpenAI 的接口，增加 `--base-url` 即可：
-
-```bash
-pycut input.mp4 \
-  --api-key YOUR_KEY \
-  --base-url https://generativelanguage.googleapis.com/v1beta/openai
 ```
 
 ## 快速开始
 
-提取高光并输出视频加字幕：
+生成字幕和可复用转录 JSON：
 
 ```bash
-pycut my_video.mp4 \
-  --api-key YOUR_KEY \
-  --format video,srt
-```
-
-只生成字幕，不做 AI 剪辑：
-
-```bash
-pycut my_video.mp4 --no-clip --format srt
+pycut my_video.mp4 --source-lang en --format srt,json
 ```
 
 生成双语字幕：
@@ -107,7 +64,38 @@ pycut my_video.mp4 \
   --translate \
   --source-lang en \
   --target-lang zh-CN \
-  --format video,srt
+  --format ass,srt,json
+```
+
+生成竖屏烧录字幕视频：
+
+```bash
+pycut lecture.mp4 \
+  --orientation portrait \
+  --translate \
+  --source-lang en \
+  --target-lang zh-CN \
+  --subtitle-position translated-top \
+  --format video,ass,json
+```
+
+导出 FCPXML 时间线：
+
+```bash
+pycut my_video.mp4 \
+  --format fcpxml,json \
+  --fcpxml-frame-rate 30
+```
+
+复用已有转录并跳过 ASR：
+
+```bash
+pycut video.mp4 --format json -o ./output
+
+pycut video.mp4 \
+  --transcript ./output/video_transcript.json \
+  --format video,srt,fcpxml \
+  -o ./output-v2
 ```
 
 如果你是从源码仓库中运行，请把上面的 `pycut` 替换为 `uv run pycut`。
@@ -118,23 +106,26 @@ pycut my_video.mp4 \
 | --- | --- | --- |
 | `--transcript` | 无 | 复用已有转录 JSON，跳过 ASR |
 | `--format` | `srt` | 输出格式，支持 `ass,srt,fcpxml,video,txt,json` |
+| `--asr-model` | 自动 | 覆盖 ASR 模型路径 |
+| `--aligner-model` | 自动 | 覆盖对齐模型路径 |
 | `--no-align` | 关闭 | 跳过强制时间对齐，使用分段级时间戳 |
-| `--api-key` | 环境变量或无 | OpenAI 兼容 API Key |
-| `--no-clip` | 关闭 | 不做 AI 高光裁剪，保留完整字幕时间线 |
-| `--highlight` | 关闭 | 在 `--no-clip` 模式下做关键词高亮 |
-| `--correct-words` | 关闭 | 用 LLM 修正 ASR 错词 |
+| `--segment-duration` | `300` | 长媒体转录分块时长，单位秒 |
 | `--translate` | 关闭 | 启用字幕翻译 |
-| `--source-lang` | `en` | 源语言，英文为默认语言 |
+| `--source-lang` | `en` | 源语言 |
 | `--target-lang` | `en` | 目标语言 |
+| `--subtitle-position` | `translated-top` | 双语字幕上下位置 |
+| `--original-subtitle-color` | `#FFFFFF` | 原文字幕颜色 |
+| `--translation-subtitle-color` | `#FFA500` | 译文字幕颜色 |
 | `--orientation` | `landscape` | `landscape` 或 `portrait` |
 | `--fcpxml-frame-rate` | `25.0` | FCPXML 帧率 |
+| `--fcpxml-speed` | `1.0` | FCPXML 时间线速度倍率 |
 
 ## 输出格式
 
 | 格式 | 说明 |
 | --- | --- |
 | `srt` | 标准字幕 |
-| `ass` | 带样式和高亮的高级字幕 |
+| `ass` | 带样式和双语布局的高级字幕 |
 | `fcpxml` | Final Cut Pro / DaVinci Resolve 时间线 |
 | `video` | 烧录字幕的 MP4 视频 |
 | `txt` | 纯文本转录 |
@@ -142,37 +133,12 @@ pycut my_video.mp4 \
 
 ## TTS 命令
 
-`pycut tts` 独立于视频剪辑流程，用于生成 WAV 语音文件：
+`pycut tts` 独立于视频处理流程，用于生成 WAV 语音文件：
 
 ```bash
 pycut tts --text "你好，pycut" --output voice.wav
 pycut tts --text-file script.txt --output voice.wav
 pycut tts --text "使用克隆声音生成这句话" --reference-audio reference.wav --prompt-text "参考音频对应文本" --output voice.wav
-```
-
-## 示例
-
-竖屏双语短视频：
-
-```bash
-pycut lecture.mp4 \
-  --api-key YOUR_KEY \
-  --orientation portrait \
-  --translate \
-  --source-lang en \
-  --target-lang zh-CN \
-  --format video,ass
-```
-
-复用已有转录：
-
-```bash
-pycut video.mp4 --format json -o ./output
-
-pycut video.mp4 \
-  --transcript ./output/video.json \
-  --api-key YOUR_KEY \
-  --format video,srt
 ```
 
 ## 处理流程
@@ -181,7 +147,7 @@ pycut video.mp4 \
 媒体输入
   -> 音频提取
   -> ASR + 对齐
-  -> 可选 AI 高光提取 / 关键词检测 / 错词纠正
+  -> 可选翻译
   -> 字幕生成
   -> 导出 SRT / ASS / FCPXML / MP4 / TXT / JSON
 ```

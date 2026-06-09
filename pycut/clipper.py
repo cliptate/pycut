@@ -5,10 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
-import re
-import shutil
 import subprocess
-import sys
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -19,7 +16,6 @@ try:
 except ImportError:
     np = None
 
-import pycut.analysis as analysis
 import pycut.config as config
 import pycut.fcpxml as fcpxml_mod
 import pycut.renderer as renderer_mod
@@ -33,27 +29,21 @@ from pycut.utils import (
     extract_audio,
     get_audio_duration,
 )
-from dataclasses import replace
 from pycut.video_io import (
     DEFAULT_OUTPUT_FORMATS,
     _load_segments_from_transcript_json,
     _normalize_output_formats,
-    _parse_output_formats,
 )
 
 
 class VideoClipper:
-    """Video clipping pipeline with ASR, analysis, translation, and subtitle rendering."""
+    """Local media pipeline with ASR, translation, subtitle rendering, and TTS-adjacent exports."""
     
     def __init__(
         self,
         asr_model_path: Optional[str] = None,
         aligner_model_path: Optional[str] = None,
         enable_align: bool = True,
-        gemini_api_key: Optional[str] = None,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None,
         segment_duration: int = 300,  # 5 minutes
         max_duration: float = 30.0,
         max_chars: int = 30,
@@ -87,21 +77,6 @@ class VideoClipper:
         backend_info = "MLX (Apple Silicon)" if self.asr_backend == "mlx" else "Qwen3-ASR"
         print(f"🚀 Initializing VideoClipper with {backend_info} backend")
         print(f"   Models will be loaded on demand to save memory")
-        
-        # Configure LLM client – delegate to analysis helper
-        # Support both new api_key and legacy gemini_api_key param
-        resolved_api_key = api_key or gemini_api_key
-        self.llm_client = analysis.create_client(resolved_api_key, base_url, model)
-        # Legacy aliases for backward compatibility in tests
-        self.gemini_model = self.llm_client
-        self.gemini_client = self.llm_client
-        if self.llm_client is not None:
-            print("✅ LLM API configured!")
-        elif not analysis.OPENAI_AVAILABLE:
-            print("⚠️  openai not installed (pip install openai)")
-            print("   Content analysis will be skipped")
-        else:
-            print("⚠️  API key not provided, skipping content analysis")
     
     def _get_asr_helper(self) -> MLXASRHelper:
         helper = getattr(self, "asr_helper", None)
@@ -137,15 +112,6 @@ class VideoClipper:
         """Load Silero VAD model on demand."""
         self._get_asr_helper().load_vad_model()
 
-    def _get_gemini_client(self):
-        client = getattr(self, "llm_client", None)
-        if client is not None:
-            return client
-        client = getattr(self, "gemini_model", None)
-        if client is not None:
-            return client
-        return getattr(self, "gemini_client", None)
-    
     def extract_audio(self, video_path: str, output_path: str) -> str:
         """Extract audio from video as WAV 16kHz mono."""
         return extract_audio(video_path, output_path)
@@ -267,43 +233,6 @@ class VideoClipper:
             print(f"🔧 Resolved {overlap_count} overlapping segment(s) using midpoint split")
         return resolved
 
-    def _correct_transcript(
-        self,
-        segments: List,
-        source_lang: str,
-    ) -> List:
-        """
-        Use Gemini to fix ASR errors in segment text. Prints a diff of every
-        change and returns the updated segment list.
-        """
-        from pycut import analysis as _analysis
-        from dataclasses import replace
-
-        client = self._get_gemini_client()
-        if client is None:
-            print("⚠️  --correct-words requires an API key (--api-key or OPENAI_API_KEY). Skipping.")
-            return segments
-
-        print("🔍 Correcting ASR errors with Gemini…")
-        corrections = _analysis.correct_words(client, segments, source_lang)
-
-        if not corrections:
-            print("✅ No ASR corrections needed.")
-            return segments
-
-        correction_map = {c["segment_id"]: c["corrected"] for c in corrections}
-        updated = []
-        for i, seg in enumerate(segments):
-            if i in correction_map:
-                original = seg.text
-                corrected = correction_map[i]
-                print(f"  📝 [{seg.start:.2f}s-{seg.end:.2f}s] {original!r} → {corrected!r}")
-                seg = replace(seg, text=corrected)
-            updated.append(seg)
-
-        print(f"✅ Applied {len(corrections)} correction(s).")
-        return updated
-
     def _filter_subtitle_segments(
         self,
         segments: List[Segment],
@@ -346,107 +275,6 @@ class VideoClipper:
             get_audio_duration=self.get_audio_duration,
         )
 
-    def analyze_with_gemini_highlights(self, segments: List[Segment], source_lang, target_lang: str) -> List[Highlight]:
-        """
-        Second stage: Extract video highlights using Gemini with detailed keyword extraction.
-
-        Delegates API call and JSON parsing to analysis.extract_highlights and
-        maps the returned dicts into Highlight dataclass instances.
-
-        Args:
-            segments: List of transcription segments
-            source_lang: Source language code (zh, en, ja, etc.)
-            target_lang: Target language for title/subtitle
-
-        Returns:
-            List of Highlight objects with keywords for highlighting
-        """
-        gemini_model = self._get_gemini_client()
-        if not gemini_model:
-            print("⚠️  LLM API not configured, skipping highlights extraction")
-            return []
-
-        print(f"🤖 Extracting highlights with LLM (language: {source_lang})...")
-
-        raw = analysis.extract_highlights(
-            gemini_model, segments, source_lang, target_lang
-        )
-
-        highlights = [
-            Highlight(
-                start=h["start"],
-                end=h["end"],
-                title=h.get("title", ""),
-                subtitle=h.get("subtitle", ""),
-                content=h.get("content", ""),
-                keywords=h.get("keywords", []),
-                segment_keywords=h.get("segment_keywords", []),
-            )
-            for h in raw
-        ]
-
-        print(f"✅ Extracted {len(highlights)} highlights")
-        for i, h in enumerate(highlights, 1):
-            keywords_info = f" (keywords: {', '.join(h.keywords)})" if h.keywords else ""
-            print(f"  {i}. [{h.start:.2f}s - {h.end:.2f}s] {h.title}{keywords_info}")
-            if h.segment_keywords:
-                print(f"     Segment highlights: {len(h.segment_keywords)} segments with keywords")
-
-        return highlights
-    
-    def analyze_content_with_gemini(
-        self, 
-        segments: List[Segment], 
-        source_lang: str = "zh",
-        target_lang: str = "en",
-        max_title_chars: int = 50,
-        max_subtitle_chars: int = 80
-    ) -> Tuple[Dict[str, str], List[Highlight]]:
-        """
-        Analyze content with Gemini - extract highlights with titles.
-        
-        The highlights extraction now includes title/subtitle generation,
-        so we no longer need a separate title generation step.
-        
-        Args:
-            segments: List of transcription segments
-            source_lang: Source language code (zh, en, ja, etc.)
-            target_lang: Target language for title/subtitle
-            max_title_chars: Maximum characters for title (passed to prompt)
-            max_subtitle_chars: Maximum characters for subtitle (passed to prompt)
-        
-        Returns:
-            Tuple of (title_info, highlights)
-            - title_info: Dict with 'title' and 'subtitle' from first highlight
-            - highlights: List of Highlight objects
-        """
-        gemini_model = self._get_gemini_client()
-        if not gemini_model:
-            print("⚠️  LLM API not configured, skipping content analysis")
-            return {}, []
-        
-        # Extract highlights (now includes title/subtitle per highlight)
-        highlights = self.analyze_with_gemini_highlights(segments, source_lang, target_lang)
-        
-        # Use the first highlight's title as the video title
-        if highlights and highlights[0].title:
-            title_info = {
-                "title": highlights[0].title,
-                "subtitle": highlights[0].subtitle
-            }
-            print(f"✅ Using highlight title: {title_info['title']}")
-            if title_info['subtitle']:
-                print(f"   Subtitle: {title_info['subtitle']}")
-        else:
-            # Fallback if no highlights extracted
-            title_info = {
-                "title": "视频精华",
-                "subtitle": "Video Highlights"
-            }
-            print("⚠️  No highlights extracted, using default title")
-        
-        return title_info, highlights
-    
     def translate_text(self, text: str, source_lang: str = "zh", target_lang: str = "en") -> str:
         """Translate text."""
         translated = self.translate_texts_bulk([text], source_lang=source_lang, target_lang=target_lang)
@@ -470,10 +298,6 @@ class VideoClipper:
         """Extract transcription text for a specific time range."""
         return subtitle_mod.extract_transcription_for_range(segments, start_time, end_time)
     
-    def _apply_keyword_highlighting(self, text: str, keywords: List[str]) -> str:
-        """Apply ASS markup for keyword highlighting."""
-        return subtitle_mod.apply_keyword_highlighting(text, keywords)
-
     def generate_ass_subtitle(
         self,
         highlights: List[Highlight],
@@ -487,7 +311,6 @@ class VideoClipper:
         first_subtitle_delay: float = 1.0,
         original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
         translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-        highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
     ) -> str:
         """Generate ASS subtitle file with multi-layer support."""
         translate_fn = self.translate_texts_bulk if translate else None
@@ -504,7 +327,6 @@ class VideoClipper:
             translate_fn=translate_fn,
             original_subtitle_color=original_subtitle_color,
             translation_subtitle_color=translation_subtitle_color,
-            highlight_subtitle_color=highlight_subtitle_color,
         )
 
     # ------------------------------------------------------------------
@@ -536,7 +358,6 @@ class VideoClipper:
         filter_empty_segments: bool = True,
         original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
         translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-        highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
     ) -> str:
         return fcpxml_mod.generate_fcpxml(
             video_path=video_path,
@@ -554,7 +375,6 @@ class VideoClipper:
             translate_fn=self.translate_texts_bulk if translate else None,
             original_subtitle_color=original_subtitle_color,
             translation_subtitle_color=translation_subtitle_color,
-            highlight_subtitle_color=highlight_subtitle_color,
         )
 
     def process_video(
@@ -567,13 +387,8 @@ class VideoClipper:
         orientation: str = "landscape",
         subtitle_position: str = "original-top",
         first_subtitle_delay: float = 1.0,
-        max_title_chars: int = 50,
-        max_subtitle_chars: int = 80,
-        enable_clip: bool = True,
-        enable_highlight: bool = False,
         original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
         translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-        highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
         filter_empty_segments: bool = True,
         margin_left: float = -0.15,
         margin_right: float = 0.15,
@@ -582,9 +397,8 @@ class VideoClipper:
         fcpxml_frame_rate: float = 25.0,
         fcpxml_speed: float = 1.0,
         transcript_json_path: Optional[str] = None,
-        correct_words: bool = False,
     ) -> Dict[str, str]:
-        """Complete video processing pipeline with memory management."""
+        """Complete local media processing pipeline with memory management."""
         print(f"\n{'='*60}")
         print(f"🎥 Processing video: {video_path}")
         print(f"{'='*60}\n")
@@ -606,7 +420,6 @@ class VideoClipper:
         want_video = "video" in selected_formats
         want_txt = "txt" in selected_formats
         want_json = "json" in selected_formats
-        render_with_highlights = enable_clip and bool({"ass", "video", "fcpxml"} & selected_formats)
         
         with tempfile.TemporaryDirectory() as tmpdir:
             transcript_path = os.path.join(output_dir, f"{video_name}_transcript.json")
@@ -634,8 +447,7 @@ class VideoClipper:
                 try:
                     segments = self.transcribe_audio(audio_path, orientation=orientation, source_lang=source_lang)
                 finally:
-                    # ASR/aligner are only needed for transcription. Release them
-                    # before correction, chunking, translation, highlights, or render work.
+                    # ASR/aligner are only needed for transcription. Release them before exports.
                     self._unload_asr_model()
 
                 # Save transcription in new metadata-wrapped format
@@ -648,28 +460,7 @@ class VideoClipper:
                 with open(transcript_path, "w", encoding="utf-8") as f:
                     json.dump(transcript_data, f, ensure_ascii=False, indent=2)
                 print(f"💾 Transcription saved to {transcript_path}")
-            
-            if correct_words:
-                segments = self._correct_transcript(segments, source_lang)
-                # Re-save transcript with corrected text
-                corrected_data = {
-                    "title": transcript_meta.get("title", ""),
-                    "subtitle": transcript_meta.get("subtitle", ""),
-                    "segments": [
-                        {
-                            "start": seg.start,
-                            "end": seg.end,
-                            "text": seg.text,
-                            "words": seg.words,
-                        }
-                        for seg in segments
-                    ],
-                    "highlights": transcript_meta.get("highlights", []),
-                }
-                with open(transcript_path, "w", encoding="utf-8") as f:
-                    json.dump(corrected_data, f, ensure_ascii=False, indent=2)
-                print(f"💾 Corrected transcript saved to {transcript_path}")
-            
+
             subtitle_segments = self._filter_subtitle_segments(segments, filter_empty_segments=filter_empty_segments)
             if margin_left != 0.0 or margin_right != 0.0:
                 subtitle_segments = self._resolve_overlaps(subtitle_segments, margin_left, margin_right)
@@ -689,278 +480,92 @@ class VideoClipper:
                 results["txt"] = txt_path
                 print(f"💾 Plain text saved to {txt_path}")
 
-            if render_with_highlights:
-                # Step 3: Split transcript into <=5-min chunks and analyze each with Gemini
-                chunked_segments = self.split_transcript_segments(subtitle_segments, float(self.segment_duration))
-                print(f"✂️  Splitting transcript into {len(chunked_segments)} chunks (<= {self.segment_duration}s)")
+            print("\n📹 Local timeline mode: exporting transcript-based outputs")
+            chunked_segments = self.split_transcript_segments(subtitle_segments, float(self.segment_duration))
+            print(f"✂️  Splitting transcript into {len(chunked_segments)} chunks (<= {self.segment_duration}s)")
+            merged_segments = [seg for chunk in chunked_segments for seg in chunk]
 
-                for chunk_idx, chunk_segments in enumerate(chunked_segments, 1):
-                    chunk_start = chunk_segments[0].start
-                    chunk_end = chunk_segments[-1].end
-                    print(f"\n🧩 Processing chunk {chunk_idx}/{len(chunked_segments)}: {chunk_start:.2f}s - {chunk_end:.2f}s")
-
-                    title_info, highlights = self.analyze_content_with_gemini(
-                        chunk_segments,
-                        source_lang,
-                        target_lang,
-                        max_title_chars,
-                        max_subtitle_chars
-                    )
-
-                    if highlights:
-                        adjusted = []
-                        for h in highlights:
-                            start = max(h.start, chunk_start)
-                            end = min(h.end, chunk_end)
-                            if end <= start:
-                                continue
-                            if start != h.start or end != h.end:
-                                h = Highlight(
-                                    start=start,
-                                    end=end,
-                                    title=h.title,
-                                    subtitle=h.subtitle,
-                                    content=h.content,
-                                    keywords=h.keywords,
-                                    segment_keywords=h.segment_keywords,
-                                )
-                            adjusted.append(h)
-                        highlights = adjusted
-
-                    if not highlights:
-                        print("⚠️  No highlights extracted, using full chunk")
-                        highlights = [Highlight(
-                            start=chunk_start,
-                            end=chunk_end,
-                            title=title_info.get("title", "完整视频"),
-                            subtitle=title_info.get("subtitle", "Full Video"),
-                            content="完整片段内容"
-                        )]
-
-                    chunk_suffix = f"part{chunk_idx:03d}"
-
-                    # Save highlights as JSON for downstream processing
-                    highlights_data = {
-                        "title": title_info.get("title", ""),
-                        "subtitle": title_info.get("subtitle", ""),
-                        "segments": [{"start": s.start, "end": s.end, "text": s.text, "words": s.words or []} for s in chunk_segments],
-                        "highlights": [
-                            {
-                                "start": h.start,
-                                "end": h.end,
-                                "title": h.title,
-                                "subtitle": h.subtitle,
-                                "content": h.content,
-                                "keywords": h.keywords or [],
-                                "segment_keywords": h.segment_keywords or [],
-                            }
-                            for h in highlights
-                        ]
-                    }
-                    highlights_json_path = os.path.join(output_dir, f"{video_name}_{chunk_suffix}_highlights.json")
-                    with open(highlights_json_path, "w", encoding="utf-8") as f:
-                        json.dump(highlights_data, f, ensure_ascii=False, indent=2)
-                    print(f"💾 Highlights JSON saved to {highlights_json_path}")
-                    results[f"highlights_json_{chunk_suffix}"] = highlights_json_path
-
-                    # Save summary per chunk
-                    summary_path = os.path.join(output_dir, f"{video_name}_{chunk_suffix}_summary.txt")
-                    with open(summary_path, "w", encoding="utf-8") as f:
-                        title = title_info.get("title", "完整视频")
-                        subtitle = title_info.get("subtitle", "Full Video")
-                        f.write(f"{title}:{subtitle}\n")
-
-                        if highlights and highlights[0].keywords:
-                            keywords_str = " ".join('#' + kw for kw in highlights[0].keywords)
-                            f.write(f"{keywords_str}\n")
-                        else:
-                            f.write("\n")
-
-                    results[f"summary_{chunk_suffix}"] = summary_path
-                    print(f"💾 Summary saved to {summary_path}")
-
-                    if want_srt:
-                        srt_path = os.path.join(output_dir, f"{video_name}_{chunk_suffix}_subtitles.srt")
-                        srt_content = _segments_to_srt(
-                            [(s.start, s.end, s.text) for s in chunk_segments if s.text.strip()]
-                        )
-                        with open(srt_path, "w", encoding="utf-8") as f:
-                            f.write(srt_content)
-                        results[f"srt_{chunk_suffix}"] = srt_path
-
-                    subtitle_path: Optional[str] = None
-                    if want_ass or want_video:
-                        subtitle_path = (
-                            os.path.join(output_dir, f"{video_name}_{chunk_suffix}_subtitles.ass")
-                            if want_ass
-                            else os.path.join(tmpdir, f"{video_name}_{chunk_suffix}_subtitles.ass")
-                        )
-                        self.generate_ass_subtitle(
-                            highlights, chunk_segments, subtitle_path,
-                            translate=translate,
-                            source_lang=source_lang,
-                            target_lang=target_lang,
-                            orientation=orientation,
-                            subtitle_position=subtitle_position,
-                            first_subtitle_delay=first_subtitle_delay,
-                            original_subtitle_color=original_subtitle_color,
-                            translation_subtitle_color=translation_subtitle_color,
-                            highlight_subtitle_color=highlight_subtitle_color,
-                        )
-                        if want_ass:
-                            results[f"subtitles_{chunk_suffix}"] = subtitle_path
-
-                    if want_fcpxml:
-                        fcpxml_path = os.path.join(output_dir, f"{video_name}_{chunk_suffix}.fcpxml")
-                        self.generate_fcpxml(
-                            video_path=video_path,
-                            highlights=highlights,
-                            segments=chunk_segments,
-                            output_path=fcpxml_path,
-                            frame_rate=fcpxml_frame_rate,
-                            speed=fcpxml_speed,
-                            translate=translate,
-                            source_lang=source_lang,
-                            target_lang=target_lang,
-                            orientation=orientation,
-                            enable_clip=True,
-                            filter_empty_segments=filter_empty_segments,
-                            original_subtitle_color=original_subtitle_color,
-                            translation_subtitle_color=translation_subtitle_color,
-                            highlight_subtitle_color=highlight_subtitle_color,
-                        )
-                        results[f"fcpxml_{chunk_suffix}"] = fcpxml_path
-
-                    if want_video and subtitle_path:
-                        final_video_path = os.path.join(output_dir, f"{video_name}_{chunk_suffix}_final.mp4")
-                        self.render_video_with_subtitles_complex(
-                            video_path=video_path,
-                            highlights=highlights,
-                            subtitle_path=subtitle_path,
-                            output_path=final_video_path,
-                            orientation=orientation,
-                        )
-                        results[f"final_video_{chunk_suffix}"] = final_video_path
-
-            else:
-                # No-clip mode: skip AI highlight extraction and export as single merged resource
-                print("\n📹 No-clip mode: skip AI highlight extraction and merge chunks into one output")
-                chunked_segments = self.split_transcript_segments(subtitle_segments, float(self.segment_duration))
-                print(f"✂️  Splitting transcript into {len(chunked_segments)} chunks (<= {self.segment_duration}s)")
-                merged_segments = [seg for chunk in chunked_segments for seg in chunk]
-
-                if merged_segments:
-                    # Keyword extraction for --highlight in no-clip mode
-                    all_segment_keywords: List[Dict] = []
-                    gemini_model = self._get_gemini_client()
-                    if enable_highlight and gemini_model:
-                        print("🔍 Highlight mode: extracting keywords via LLM...")
-                        offset = 0
-                        for chunk in chunked_segments:
-                            chunk_kws = analysis.extract_keywords_for_segments(
-                                gemini_model, chunk, source_lang, target_lang
-                            )
-                            for kw in chunk_kws:
-                                all_segment_keywords.append({
-                                    "segment_id": kw["segment_id"] + offset,
-                                    "keywords": kw["keywords"],
-                                })
-                            offset += len(chunk)
-                        print(f"✅ Extracted keywords for {len(all_segment_keywords)} segment(s)")
-                    elif enable_highlight and not gemini_model:
-                        print("⚠️  --highlight requires an API key; skipping keyword extraction")
-
-                    seg_kw_lookup = {kw["segment_id"]: kw["keywords"] for kw in all_segment_keywords}
-
-                    if self.filter_fillers:
-                        merged_highlights = [
-                            Highlight(
-                                start=seg.start,
-                                end=seg.end,
-                                title="",
-                                subtitle="",
-                                content="",
-                                segment_keywords=(
-                                    [{"segment_id": global_idx, "keywords": seg_kw_lookup[global_idx]}]
-                                    if global_idx in seg_kw_lookup
-                                    else []
-                                ),
-                            )
-                            for global_idx, seg in enumerate(merged_segments)
-                        ]
-                    else:
-                        merged_highlights = [Highlight(
-                            start=merged_segments[0].start,
-                            end=merged_segments[-1].end,
-                            title=transcript_meta.get("title", ""),
-                            subtitle=transcript_meta.get("subtitle", ""),
+            if merged_segments:
+                if self.filter_fillers:
+                    merged_highlights = [
+                        Highlight(
+                            start=seg.start,
+                            end=seg.end,
+                            title="",
+                            subtitle="",
                             content="",
-                            segment_keywords=all_segment_keywords,
-                        )]
-
-
-                    if want_srt:
-                        srt_path = os.path.join(output_dir, f"{video_name}_subtitles.srt")
-                        srt_content = _segments_to_srt(
-                            [(s.start, s.end, s.text) for s in merged_segments if s.text.strip()]
                         )
-                        with open(srt_path, "w", encoding="utf-8") as f:
-                            f.write(srt_content)
-                        results["srt"] = srt_path
+                        for seg in merged_segments
+                    ]
+                else:
+                    merged_highlights = [Highlight(
+                        start=merged_segments[0].start,
+                        end=merged_segments[-1].end,
+                        title=transcript_meta.get("title", ""),
+                        subtitle=transcript_meta.get("subtitle", ""),
+                        content="",
+                    )]
 
-                    subtitle_path: Optional[str] = None
-                    if want_ass or want_video:
-                        subtitle_path = (
-                            os.path.join(output_dir, f"{video_name}_subtitles.ass")
-                            if want_ass
-                            else os.path.join(tmpdir, f"{video_name}_subtitles.ass")
-                        )
-                        self.generate_ass_subtitle(
-                            merged_highlights, merged_segments, subtitle_path,
-                            translate=translate,
-                            source_lang=source_lang,
-                            target_lang=target_lang,
-                            orientation=orientation,
-                            subtitle_position=subtitle_position,
-                            first_subtitle_delay=0.0,
-                            original_subtitle_color=original_subtitle_color,
-                            translation_subtitle_color=translation_subtitle_color,
-                            highlight_subtitle_color=highlight_subtitle_color,
-                        )
-                        if want_ass:
-                            results["subtitles"] = subtitle_path
+                if want_srt:
+                    srt_path = os.path.join(output_dir, f"{video_name}_subtitles.srt")
+                    srt_content = _segments_to_srt(
+                        [(s.start, s.end, s.text) for s in merged_segments if s.text.strip()]
+                    )
+                    with open(srt_path, "w", encoding="utf-8") as f:
+                        f.write(srt_content)
+                    results["srt"] = srt_path
 
-                    if want_fcpxml:
-                        fcpxml_path = os.path.join(output_dir, f"{video_name}.fcpxml")
-                        self.generate_fcpxml(
-                            video_path=video_path,
-                            highlights=merged_highlights,
-                            segments=merged_segments,
-                            output_path=fcpxml_path,
-                            frame_rate=fcpxml_frame_rate,
-                            speed=fcpxml_speed,
-                            translate=translate,
-                            source_lang=source_lang,
-                            target_lang=target_lang,
-                            orientation=orientation,
-                            enable_clip=True,
-                            filter_empty_segments=filter_empty_segments,
-                            original_subtitle_color=original_subtitle_color,
-                            translation_subtitle_color=translation_subtitle_color,
-                            highlight_subtitle_color=highlight_subtitle_color,
-                        )
-                        results["fcpxml"] = fcpxml_path
+                subtitle_path: Optional[str] = None
+                if want_ass or want_video:
+                    subtitle_path = (
+                        os.path.join(output_dir, f"{video_name}_subtitles.ass")
+                        if want_ass
+                        else os.path.join(tmpdir, f"{video_name}_subtitles.ass")
+                    )
+                    self.generate_ass_subtitle(
+                        merged_highlights, merged_segments, subtitle_path,
+                        translate=translate,
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                        orientation=orientation,
+                        subtitle_position=subtitle_position,
+                        first_subtitle_delay=0.0,
+                        original_subtitle_color=original_subtitle_color,
+                        translation_subtitle_color=translation_subtitle_color,
+                    )
+                    if want_ass:
+                        results["subtitles"] = subtitle_path
 
-                    if want_video and subtitle_path:
-                        final_video_path = os.path.join(output_dir, f"{video_name}_final.mp4")
-                        self.render_video_with_subtitles_complex(
-                            video_path=video_path,
-                            highlights=merged_highlights,
-                            subtitle_path=subtitle_path,
-                            output_path=final_video_path,
-                            orientation=orientation,
-                        )
-                        results["final_video"] = final_video_path
+                if want_fcpxml:
+                    fcpxml_path = os.path.join(output_dir, f"{video_name}.fcpxml")
+                    self.generate_fcpxml(
+                        video_path=video_path,
+                        highlights=merged_highlights,
+                        segments=merged_segments,
+                        output_path=fcpxml_path,
+                        frame_rate=fcpxml_frame_rate,
+                        speed=fcpxml_speed,
+                        translate=translate,
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                        orientation=orientation,
+                        enable_clip=True,
+                        filter_empty_segments=filter_empty_segments,
+                        original_subtitle_color=original_subtitle_color,
+                        translation_subtitle_color=translation_subtitle_color,
+                    )
+                    results["fcpxml"] = fcpxml_path
+
+                if want_video and subtitle_path:
+                    final_video_path = os.path.join(output_dir, f"{video_name}_final.mp4")
+                    self.render_video_with_subtitles_complex(
+                        video_path=video_path,
+                        highlights=merged_highlights,
+                        subtitle_path=subtitle_path,
+                        output_path=final_video_path,
+                        orientation=orientation,
+                    )
+                    results["final_video"] = final_video_path
 
         print(f"\n{'='*60}")
         print(f"✅ Processing complete!")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Callable, List, Optional
 
 import pycut.config as config
@@ -23,40 +22,6 @@ def extract_transcription_for_range(
     return " ".join(texts)
 
 
-def apply_keyword_highlighting(
-    text: str,
-    keywords: List[str],
-    highlight_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
-) -> str:
-    """Apply ASS markup for keyword highlighting.
-
-    ASS tags used:
-    - \\c&H<color>& : Primary color (BGR format)
-    - \\fscx<percent> : Font width scale
-    - \\fscy<percent> : Font height scale
-    - \\r : Reset to default style
-
-    Returns text with ASS highlighting tags (yellow, 1.1x size) around each keyword.
-    """
-    if not keywords:
-        return text
-
-    highlight_start = rf"{{\c{hex_color_to_ass(highlight_color)}&\fscx110\fscy110}}"
-    highlight_end = r"{\r}"
-
-    sorted_keywords = sorted(keywords, key=len, reverse=True)
-    escaped_keywords = [re.escape(kw) for kw in sorted_keywords]
-    pattern = "|".join(escaped_keywords)
-
-    if not pattern:
-        return text
-
-    def replace_func(match: re.Match) -> str:
-        return f"{highlight_start}{match.group(0)}{highlight_end}"
-
-    return re.sub(pattern, replace_func, text, flags=re.IGNORECASE)
-
-
 def generate_ass_subtitle(
     highlights: List[Highlight],
     segments: List[Segment],
@@ -70,7 +35,6 @@ def generate_ass_subtitle(
     translate_fn: Optional[Callable[[List[str], str, str], List[str]]] = None,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-    highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
 ) -> str:
     """Generate an ASS subtitle file with multi-layer support.
 
@@ -167,14 +131,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             seg for seg in segments if seg.end > h.start and seg.start < h.end
         ]
 
-        segment_keywords_map: dict = {}
-        if h.segment_keywords:
-            for sk in h.segment_keywords:
-                seg_id = sk.get("segment_id")
-                kws = sk.get("keywords", [])
-                if seg_id is not None and kws:
-                    segment_keywords_map[seg_id] = kws
-
         processed_segments = []
         for i, seg in enumerate(highlight_segments):
             try:
@@ -216,41 +172,25 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             seg_end = format_time(seg_data["end"])
             original_text = seg_data["text"]
 
-            segment_id = seg_data.get("segment_id")
-            keywords_for_segment = (
-                segment_keywords_map.get(segment_id, []) if segment_id is not None else []
-            )
-
-            highlighted_original = apply_keyword_highlighting(
-                original_text,
-                keywords_for_segment,
-                highlight_color=highlight_subtitle_color,
-            )
-
             if translate and translated_segments:
                 translated_text = translated_segments[seg_idx]
-                highlighted_translated = apply_keyword_highlighting(
-                    translated_text,
-                    keywords_for_segment,
-                    highlight_color=highlight_subtitle_color,
-                )
                 if subtitle_position == "original-top":
                     events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{highlighted_original}"
+                        f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{original_text}"
                     )
                     events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},TranslationBottom,,0,0,0,,{highlighted_translated}"
+                        f"Dialogue: 0,{seg_start},{seg_end},TranslationBottom,,0,0,0,,{translated_text}"
                     )
                 else:
                     events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},TranslationTop,,0,0,0,,{highlighted_translated}"
+                        f"Dialogue: 0,{seg_start},{seg_end},TranslationTop,,0,0,0,,{translated_text}"
                     )
                     events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},OriginalBottom,,0,0,0,,{highlighted_original}"
+                        f"Dialogue: 0,{seg_start},{seg_end},OriginalBottom,,0,0,0,,{original_text}"
                     )
             else:
                 events.append(
-                    f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{highlighted_original}"
+                    f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{original_text}"
                 )
 
         cumulative_time += duration

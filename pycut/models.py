@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List
+from dataclasses import dataclass
 
 
 @dataclass
@@ -13,5 +12,3 @@ class Highlight:
     title: str
     subtitle: str
     content: str
-    keywords: List[str] = field(default_factory=list)
-    segment_keywords: List[Dict] = field(default_factory=list)

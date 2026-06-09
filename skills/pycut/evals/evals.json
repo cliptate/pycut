@@ -1,0 +1,29 @@
+{
+  "skill_name": "pycut",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have /tmp/interview.mp4 and only need a reusable transcript plus SRT subtitles. Don't make clips, and keep it English.",
+      "expected_output": "Chooses the local transcription workflow, uses --source-lang en, and requests json plus srt outputs without remote-analysis flags.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "把 ~/Movies/podcast.mov 做成竖屏视频，加中英双语字幕，不需要自动挑精华。",
+      "expected_output": "Chooses local rendering with portrait orientation, translation/bilingual subtitle options, and video/ass/json outputs without remote-analysis clipping.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I already generated ./out/lecture_transcript.json. Reuse it to export an fcpxml timeline and ASS subtitles, no ASR rerun.",
+      "expected_output": "Uses --transcript with a single media input and exports fcpxml/ass formats without remote-analysis flags.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Turn this narration file script.txt into a WAV voiceover, using reference.wav as the speaker reference.",
+      "expected_output": "Uses the pycut tts subcommand with --text-file, --reference-audio, and --output, without invoking the video clipping pipeline.",
+      "files": []
+    }
+  ]
+}

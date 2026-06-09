@@ -9,7 +9,6 @@ description = "A Python library for cutting videos using AI-based speech recogni
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "openai>=1.0.0",
     "httpx<0.28",
     "mlx-audio>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "numpy>=1.26",

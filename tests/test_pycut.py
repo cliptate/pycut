@@ -26,14 +26,14 @@ def test_runtime_guard_accepts_linux_and_rejects_unsupported_systems(monkeypatch
     monkeypatch.setattr(config.platform, "system", lambda: "Linux")
     monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
 
-    clipper = VideoClipper(gemini_api_key=None)
+    clipper = VideoClipper()
     assert clipper.asr_backend == "qwen"
 
     monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(config.platform, "machine", lambda: "x86_64")
 
     with pytest.raises(RuntimeError, match="macOS Apple Silicon, Linux, and Windows"):
-        VideoClipper(gemini_api_key=None)
+        VideoClipper()
 
 
 def test_google_translator_translate_bulk_returns_translated_texts(monkeypatch):
@@ -105,7 +105,7 @@ def test_video_clipper_uses_google_translator_service(monkeypatch):
     monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
 
-    clipper = VideoClipper(gemini_api_key=None, translator=FakeTranslatorService())
+    clipper = VideoClipper(translator=FakeTranslatorService())
 
     assert not hasattr(clipper, "runtime_backend")
     assert not hasattr(clipper, "translate_model_path")
@@ -265,7 +265,7 @@ def test_video_clipper_delegates_asr_loading_to_helper(monkeypatch):
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
     monkeypatch.setattr(clipper_module, "MLXASRHelper", FakeASRHelper, raising=False)
 
-    vc = clipper_module.VideoClipper(gemini_api_key=None)
+    vc = clipper_module.VideoClipper()
     vc._load_asr_model()
 
     assert isinstance(vc.asr_helper, FakeASRHelper)
@@ -317,8 +317,8 @@ def test_transcribe_audio_runs_vad_on_full_audio_before_transcript_chunking(monk
     ]
 
 
-def test_process_video_unloads_asr_before_correction_and_postprocessing(monkeypatch, tmp_path):
-    """ASR should be released before LLM correction and transcript chunk consumers."""
+def test_process_video_unloads_asr_before_postprocessing(monkeypatch, tmp_path):
+    """ASR should be released before transcript export consumers."""
     import pycut.clipper as clipper_module
     from pycut.utils import Segment
 
@@ -328,8 +328,6 @@ def test_process_video_unloads_asr_before_correction_and_postprocessing(monkeypa
 
     events = []
     raw_segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
-    corrected_segments = [Segment(start=0.0, end=1.0, text="hello corrected", words=[])]
-
     monkeypatch.setattr(clipper, "extract_audio", lambda video_path, output_path: events.append("extract"))
 
     def fake_transcribe(audio_path, orientation="landscape", source_lang="en"):
@@ -339,29 +337,23 @@ def test_process_video_unloads_asr_before_correction_and_postprocessing(monkeypa
     def fake_unload():
         events.append("unload")
 
-    def fake_correct(segments, source_lang):
-        events.append("correct")
-        return corrected_segments
-
     def fake_filter(segments, filter_empty_segments=True):
         events.append("filter")
         return list(segments)
 
     monkeypatch.setattr(clipper, "transcribe_audio", fake_transcribe)
     monkeypatch.setattr(clipper, "_unload_asr_model", fake_unload)
-    monkeypatch.setattr(clipper, "_correct_transcript", fake_correct)
     monkeypatch.setattr(clipper, "_filter_subtitle_segments", fake_filter)
 
     result = clipper.process_video(
         "demo.mp4",
         str(tmp_path),
         output_formats=["json"],
-        correct_words=True,
         margin_left=0.0,
         margin_right=0.0,
     )
 
-    assert events == ["extract", "transcribe", "unload", "correct", "filter"]
+    assert events == ["extract", "transcribe", "unload", "filter"]
     assert result == {"transcript": str(tmp_path / "demo_transcript.json")}
 
 
@@ -665,7 +657,7 @@ def test_video_clipper_instance_omits_legacy_device_state(monkeypatch, capsys):
     monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
 
-    clipper = VideoClipper(gemini_api_key=None)
+    clipper = VideoClipper()
 
     assert not hasattr(clipper, "device")
     assert not hasattr(clipper, "_mlx_translate_model")
@@ -947,261 +939,32 @@ def test_voxcpm_tts_helper_wraps_binary_import_errors(monkeypatch):
         helper.load_model()
 
 
-def test_create_gemini_client_returns_none_without_api_key():
-    """Client helper should no-op when no API key is provided."""
-    import pycut.analysis as analysis
-
-    assert analysis.create_client(None) is None
-
-
-def test_create_gemini_client_returns_none_when_dependency_missing(monkeypatch):
-    """Client helper should safely no-op when openai is unavailable."""
-    import pycut.analysis as analysis
-
-    monkeypatch.setattr(analysis, "OPENAI_AVAILABLE", False)
-    monkeypatch.setattr(analysis, "OpenAI", None)
-
-    assert analysis.create_client("secret-key") is None
-
-
-def test_create_gemini_client_builds_configured_client(monkeypatch):
-    """Client helper should build OpenAI client with the configured API key."""
-    import pycut.analysis as analysis
-
-    seen = {}
-    sentinel_client = types.SimpleNamespace()
-
-    def fake_client(*, api_key, base_url=None, timeout=None):
-        seen["api_key"] = api_key
-        seen["base_url"] = base_url
-        seen["timeout"] = timeout
-        return sentinel_client
-
-    monkeypatch.setattr(analysis, "OpenAI", fake_client)
-
-    result = analysis.create_client("secret-key")
-    assert result is sentinel_client
-    assert seen["api_key"] == "secret-key"
-    assert seen["base_url"] == "https://api.openai.com/v1"
-    assert seen["timeout"] == 60
-
-
-def test_extract_json_payload_strips_fenced_json():
-    """Gemini helper should extract JSON from fenced markdown responses."""
-    import pycut.analysis as analysis
-
-    fenced = """```json
-{"highlights": [{"title": "demo"}]}
-```"""
-
-    assert analysis.extract_json_payload(fenced) == '{"highlights": [{"title": "demo"}]}'
-
-
-def test_extract_gemini_highlights_returns_empty_list_for_null_highlights():
-    """Highlight extraction should treat a null highlights payload as no highlights."""
-    import pycut.analysis as analysis
-    from pycut.utils import Segment
-
-    class FakeCompletions:
-        def create(self, *, model, messages):
-            return types.SimpleNamespace(
-                choices=[types.SimpleNamespace(
-                    message=types.SimpleNamespace(content='{"highlights": null}')
-                )]
-            )
-
-    client = types.SimpleNamespace(
-        chat=types.SimpleNamespace(completions=FakeCompletions()),
-        _pycut_model="test-model",
-    )
-    segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
-
-    assert analysis.extract_highlights(client, segments, source_lang="zh", target_lang="en") == []
-
-
-def test_extract_gemini_highlights_skips_entries_missing_start_or_end():
-    """Highlight extraction should skip malformed entries missing required bounds."""
-    import pycut.analysis as analysis
-    from pycut.utils import Segment
-
-    class FakeCompletions:
-        def create(self, *, model, messages):
-            return types.SimpleNamespace(
-                choices=[types.SimpleNamespace(
-                    message=types.SimpleNamespace(content="""{
-  "highlights": [
-    {"end": 4.0, "title": "missing start"},
-    {"start": 2.0, "title": "missing end"},
-    {"start": 3.0, "end": 8.5, "title": "usable"}
-  ]
-}""")
-                )]
-            )
-
-    client = types.SimpleNamespace(
-        chat=types.SimpleNamespace(completions=FakeCompletions()),
-        _pycut_model="test-model",
-    )
-    segments = [Segment(start=0.0, end=10.0, text="hello", words=[])]
-
-    highlights = analysis.extract_highlights(
-        client, segments, source_lang="zh", target_lang="en"
-    )
-
-    assert len(highlights) == 1
-    assert highlights[0]["start"] == 3.0
-    assert highlights[0]["end"] == 8.5
-    assert highlights[0]["title"] == "usable"
-
-
-def test_sanitize_segment_keywords_skips_non_integer_segment_ids():
-    """Segment keyword metadata should keep only entries with integer segment IDs."""
-    import pycut.analysis as analysis
-
-    assert analysis._sanitize_segment_keywords(
-        [
-            {"segment_id": "0", "keywords": ["alpha"]},
-            {"segment_id": 1.5, "keywords": ["beta"]},
-            {"segment_id": True, "keywords": ["gamma"]},
-            {"segment_id": 2, "keywords": ["delta"]},
-        ]
-    ) == [{"segment_id": 2, "keywords": ["delta"]}]
-
-
-def test_sanitize_highlights_payload_replaces_none_text_fields_with_empty_strings():
-    """Highlight text fields should treat null values as empty strings."""
-    import pycut.analysis as analysis
-
-    assert analysis._sanitize_highlights_payload(
-        [
-            {
-                "start": 1.0,
-                "end": 2.0,
-                "title": None,
-                "subtitle": None,
-                "content": None,
-            }
-        ]
-    ) == [
-        {
-            "start": 1.0,
-            "end": 2.0,
-            "title": "",
-            "subtitle": "",
-            "content": "",
-            "keywords": [],
-            "segment_keywords": [],
-        }
-    ]
-
-
-def test_sanitize_keyword_list_ignores_complex_non_string_values():
-    """Keyword sanitization should drop malformed nested values instead of stringifying them."""
-    import pycut.analysis as analysis
-
-    assert analysis._sanitize_keyword_list(
-        ["alpha", {"keyword": "beta"}, ["gamma"], ("delta",), 2024, "omega", None]
-    ) == ["alpha", "2024", "omega"]
-
-
-def test_video_clipper_delegates_gemini_client_creation(monkeypatch):
-    """VideoClipper should delegate LLM client setup to analysis helpers."""
-    import pycut.analysis as analysis
+def test_video_clipper_constructor_omits_remote_analysis_args(monkeypatch):
+    """VideoClipper should no longer expose remote-analysis constructor args."""
+    import inspect
     import pycut.config as config
     from pycut.clipper import VideoClipper
 
-    seen = {}
-    sentinel_client = object()
-
-    def fake_create_client(api_key, base_url=None, model=None):
-        seen["api_key"] = api_key
-        seen["base_url"] = base_url
-        seen["model"] = model
-        return sentinel_client
-
     monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(analysis, "create_client", fake_create_client)
 
-    clipper = VideoClipper(api_key="secret-key")
+    params = inspect.signature(VideoClipper).parameters
 
-    assert seen["api_key"] == "secret-key"
-    assert clipper.llm_client is sentinel_client
-
-
-def test_video_clipper_delegates_gemini_highlight_payload_parsing(monkeypatch):
-    """VideoClipper should map helper payloads into Highlight objects."""
-    import pycut.analysis as analysis
-    import pycut.clipper as clipper_module
-    from pycut.models import Highlight
-    from pycut.utils import Segment
-
-    seen = {}
-
-    def fake_extract_highlights(client, segments, source_lang, target_lang):
-        seen["client"] = client
-        seen["segments"] = segments
-        seen["source_lang"] = source_lang
-        seen["target_lang"] = target_lang
-        return [
-            {
-                "start": 1.5,
-                "end": 9.0,
-                "title": "重点",
-                "subtitle": "副标题",
-                "content": "摘要",
-                "keywords": ["关键"],
-                "segment_keywords": [{"segment_id": 0, "keywords": ["测试"]}],
-            }
-        ]
-
-    monkeypatch.setattr(analysis, "extract_highlights", fake_extract_highlights)
-
-    vc = clipper_module.VideoClipper.__new__(clipper_module.VideoClipper)
-    vc.llm_client = object()
-    segments = [Segment(start=1.5, end=9.0, text="hello", words=[])]
-
-    highlights = vc.analyze_with_gemini_highlights(segments, source_lang="zh", target_lang="en")
-
-    assert seen["client"] is vc.llm_client
-    assert seen["segments"] == segments
-    assert seen["source_lang"] == "zh"
-    assert seen["target_lang"] == "en"
-    assert len(highlights) == 1
-    assert isinstance(highlights[0], Highlight)
-    assert highlights[0].title == "重点"
-    assert highlights[0].segment_keywords == [{"segment_id": 0, "keywords": ["测试"]}]
+    assert "gemini_api_key" not in params
+    assert "api_key" not in params
+    assert "base_url" not in params
+    assert "model" not in params
 
 
-def test_video_clipper_skips_gemini_highlights_when_model_unset(monkeypatch):
-    """VideoClipper should short-circuit to [] when LLM client is unset."""
-    import pycut.analysis as analysis
-    import pycut.clipper as clipper_module
-    from pycut.utils import Segment
-
-    helper_calls = []
-
-    def fake_extract_highlights(*args, **kwargs):
-        helper_calls.append((args, kwargs))
-        return [{"title": "should not be used"}]
-
-    monkeypatch.setattr(analysis, "extract_highlights", fake_extract_highlights)
-
-    clipper = clipper_module.VideoClipper.__new__(clipper_module.VideoClipper)
-    segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
-
-    assert clipper.analyze_with_gemini_highlights(segments, source_lang="zh", target_lang="en") == []
-    assert helper_calls == []
-
-
-def test_main_module_delegates_gemini_helpers_to_analysis_module():
-    """clipper.py should delegate LLM client setup and parsing to analysis.py."""
+def test_main_module_omits_remote_analysis_helpers():
+    """clipper.py should not import or call the removed remote analysis module."""
     import pycut.clipper as clipper_module
 
     source = inspect.getsource(clipper_module)
 
-    assert "analysis.create_client" in source
-    assert "analysis.extract_highlights" in source
+    assert "pycut.analysis" not in source
+    assert "analysis." not in source
+    assert "OpenAI" not in source
     assert "from google import genai" not in source
     assert "GEMINI_AVAILABLE =" not in source
     assert "genai.Client(" not in source
@@ -1297,12 +1060,6 @@ def _check_imports():
         return False
 
     try:
-        import openai
-        print(f"✅ openai {openai.__version__}")
-    except ImportError as e:
-        print(f"⚠️  openai: {e} (optional for LLM analysis)")
-
-    try:
         import numpy as np
         print(f"✅ numpy {np.__version__}")
     except ImportError as e:
@@ -1377,41 +1134,6 @@ def test_gpu():
     return _check_runtime_backend()
 
 
-def _check_gemini_api():
-    """Test OpenAI-compatible API key."""
-    print("\nTesting LLM API...")
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    
-    if not api_key:
-        print("⚠️  OPENAI_API_KEY not set (content analysis will be skipped)")
-        print("   Set it with: export OPENAI_API_KEY='your-api-key'")
-        return True
-    
-    print(f"✅ API key is set ({api_key[:10]}...)")
-    
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        print("✅ OpenAI client configured")
-        
-        # Test API with simple request
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": "Say 'test successful' in exactly two words."}],
-        )
-        print(f"✅ LLM API test: {response.choices[0].message.content.strip()}")
-        
-    except Exception as e:
-        print(f"❌ LLM API test failed: {e}")
-        return False
-    
-    return True
-
-
-def test_gemini_api():
-    return _check_gemini_api()
-
-
 def _check_translation_model():
     """Test if translation model can be loaded (without actually loading it)."""
     print("\nTesting translation model availability...")
@@ -1444,7 +1166,6 @@ def main():
     all_ok &= _check_imports()
     all_ok &= _check_ffmpeg()
     all_ok &= _check_runtime_backend()
-    all_ok &= _check_gemini_api()
     all_ok &= _check_translation_model()
     
     print("\n" + "="*60)
@@ -1583,8 +1304,6 @@ class TestProcessVideoTranscriptInput:
                 clipper = VideoClipper.__new__(VideoClipper)
                 clipper.filter_fillers = False
                 clipper.segment_duration = 300
-                clipper.llm_client = None
-                clipper.gemini_model = None
                 clipper.max_chars = 30
 
                 extract_called = []
@@ -1627,8 +1346,6 @@ class TestProcessVideoTranscriptInput:
                 clipper = VideoClipper.__new__(VideoClipper)
                 clipper.filter_fillers = False
                 clipper.segment_duration = 300
-                clipper.llm_client = None
-                clipper.gemini_model = None
                 clipper.max_chars = 30
                 clipper.asr_model = None
                 clipper._mlx_aligner = None
@@ -1642,7 +1359,6 @@ class TestProcessVideoTranscriptInput:
                         output_dir=output_dir,
                         output_formats=["fcpxml"],
                         transcript_json_path=json_path,
-                        enable_clip=False,
                     )
 
                 titles = [h.title for h in captured_highlights]
@@ -1663,8 +1379,6 @@ class TestHighlightsJsonOutput:
                 start=0.0, end=10.0,
                 title="测试标题", subtitle="副标题",
                 content="内容",
-                keywords=["k1", "k2"],
-                segment_keywords=[{"segment_id": 0, "keywords": ["w1"]}]
             )
         ]
 
@@ -1675,8 +1389,6 @@ class TestHighlightsJsonOutput:
                 "title": h.title,
                 "subtitle": h.subtitle,
                 "content": h.content,
-                "keywords": h.keywords or [],
-                "segment_keywords": h.segment_keywords or [],
             }
             for h in highlights
         ]
@@ -1686,26 +1398,11 @@ class TestHighlightsJsonOutput:
 
         assert parsed[0]["title"] == "测试标题"
         assert parsed[0]["subtitle"] == "副标题"
-        assert parsed[0]["keywords"] == ["k1", "k2"]
-        assert parsed[0]["segment_keywords"][0]["segment_id"] == 0
 
 
 # ---------------------------------------------------------------------------
 # subtitle module tests
 # ---------------------------------------------------------------------------
-
-def test_apply_keyword_highlighting_wraps_keywords_in_ass_tags():
-    import pycut.subtitle as subtitle
-    result = subtitle.apply_keyword_highlighting("hello world", ["world"])
-    assert r"{\c&H0000FFFF&\fscx110\fscy110}" in result
-    assert "world" in result
-    assert r"{\r}" in result
-
-
-def test_apply_keyword_highlighting_returns_text_unchanged_when_no_keywords():
-    import pycut.subtitle as subtitle
-    assert subtitle.apply_keyword_highlighting("hello world", []) == "hello world"
-
 
 def test_extract_transcription_for_range_returns_overlapping_text():
     import pycut.subtitle as subtitle
@@ -1737,109 +1434,15 @@ def test_select_video_encoder_returns_libx264_on_linux(monkeypatch):
     assert renderer.select_video_encoder() == "libx264"
 
 
-# ---------------------------------------------------------------------------
-# analysis.extract_keywords_for_segments tests
-# ---------------------------------------------------------------------------
-
-def test_extract_keywords_for_segments_returns_segment_keywords():
-    """extract_keywords_for_segments should parse LLM response into segment_keywords list."""
-    import pycut.analysis as analysis
-    from pycut.utils import Segment
-
-    response_text = '{"segment_keywords": [{"segment_id": 0, "keywords": ["hello"]}, {"segment_id": 2, "keywords": ["world", "foo"]}]}'
-
-    class FakeCompletions:
-        def create(self, *, model, messages):
-            return types.SimpleNamespace(
-                choices=[types.SimpleNamespace(
-                    message=types.SimpleNamespace(content=response_text)
-                )]
-            )
-
-    fake_client = types.SimpleNamespace(
-        chat=types.SimpleNamespace(completions=FakeCompletions()),
-        _pycut_model="test-model",
-    )
-    segments = [
-        Segment(start=0.0, end=1.0, text="hello", words=[]),
-        Segment(start=1.0, end=2.0, text="there", words=[]),
-        Segment(start=2.0, end=3.0, text="world", words=[]),
-    ]
-    result = analysis.extract_keywords_for_segments(fake_client, segments, "en", "en")
-
-    assert result == [
-        {"segment_id": 0, "keywords": ["hello"]},
-        {"segment_id": 2, "keywords": ["world", "foo"]},
-    ]
-
-
-def test_extract_keywords_for_segments_returns_empty_on_failure():
-    """extract_keywords_for_segments should return [] when LLM call fails."""
-    import pycut.analysis as analysis
-    from pycut.utils import Segment
-
-    class FakeCompletions:
-        def create(self, *, model, messages):
-            raise RuntimeError("network error")
-
-    fake_client = types.SimpleNamespace(
-        chat=types.SimpleNamespace(completions=FakeCompletions()),
-        _pycut_model="test-model",
-    )
-    segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
-    result = analysis.extract_keywords_for_segments(fake_client, segments, "en", "en")
-    assert result == []
-
-
-def test_extract_keywords_for_segments_skips_invalid_entries():
-    """extract_keywords_for_segments should skip entries with non-integer segment_id."""
-    import pycut.analysis as analysis
-    from pycut.utils import Segment
-
-    response_text = '{"segment_keywords": [{"segment_id": "bad", "keywords": ["x"]}, {"segment_id": 1, "keywords": ["ok"]}]}'
-
-    class FakeCompletions:
-        def create(self, *, model, messages):
-            return types.SimpleNamespace(
-                choices=[types.SimpleNamespace(
-                    message=types.SimpleNamespace(content=response_text)
-                )]
-            )
-
-    fake_client = types.SimpleNamespace(
-        chat=types.SimpleNamespace(completions=FakeCompletions()),
-        _pycut_model="test-model",
-    )
-    segments = [
-        Segment(start=0.0, end=1.0, text="a", words=[]),
-        Segment(start=1.0, end=2.0, text="b", words=[]),
-    ]
-    result = analysis.extract_keywords_for_segments(fake_client, segments, "en", "en")
-    assert result == [{"segment_id": 1, "keywords": ["ok"]}]
-
-
-# ---------------------------------------------------------------------------
-# --highlight / enable_highlight integration tests
-# ---------------------------------------------------------------------------
-
-def test_process_video_no_clip_highlight_calls_keyword_extraction(monkeypatch, tmp_path):
-    """process_video with enable_clip=False and enable_highlight=True should call extract_keywords_for_segments."""
+def test_process_video_ignores_deprecated_remote_analysis_flags(monkeypatch, tmp_path):
+    """Deprecated process_video flags should not create analysis side outputs."""
     import json as _json
-    import pycut.analysis as analysis
     import pycut.config as config
     from pycut.clipper import VideoClipper
     from pycut.utils import Segment
 
     monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
-
-    keyword_calls = []
-
-    def fake_extract_keywords(client, segs, source_lang, target_lang):
-        keyword_calls.append(len(segs))
-        return [{"segment_id": 0, "keywords": ["test"]}]
-
-    monkeypatch.setattr(analysis, "extract_keywords_for_segments", fake_extract_keywords)
 
     fake_segments = [
         Segment(start=0.0, end=1.0, text="hello", words=[]),
@@ -1854,8 +1457,6 @@ def test_process_video_no_clip_highlight_calls_keyword_extraction(monkeypatch, t
     }))
 
     vc = VideoClipper.__new__(VideoClipper)
-    vc.llm_client = object()  # truthy fake client
-    vc.gemini_client = vc.llm_client
     vc.segment_duration = 300
     vc.filter_fillers = False
     vc.max_chars = 30
@@ -1870,16 +1471,12 @@ def test_process_video_no_clip_highlight_calls_keyword_extraction(monkeypatch, t
     vc.process_video(
         video_path=str(tmp_path / "video.mp4"),
         output_dir=str(tmp_path),
-        enable_clip=False,
-        enable_highlight=True,
         translate=False,
         source_lang="en",
         target_lang="en",
         orientation="landscape",
         subtitle_position="translated-top",
         first_subtitle_delay=0.0,
-        max_title_chars=6,
-        max_subtitle_chars=10,
         filter_empty_segments=True,
         margin_left=0.0,
         margin_right=0.0,
@@ -1889,78 +1486,12 @@ def test_process_video_no_clip_highlight_calls_keyword_extraction(monkeypatch, t
         transcript_json_path=str(transcript_path),
     )
 
-    assert len(keyword_calls) >= 1, "extract_keywords_for_segments should have been called"
+    assert not list(tmp_path.glob("*_highlights.json"))
+    assert not list(tmp_path.glob("*_summary.txt"))
 
 
-def test_process_video_no_clip_without_highlight_skips_keyword_extraction(monkeypatch, tmp_path):
-    """process_video with enable_clip=False and enable_highlight=False should NOT call extract_keywords_for_segments."""
-    import json as _json
-    import pycut.analysis as analysis
-    import pycut.config as config
-    from pycut.clipper import VideoClipper
-    from pycut.utils import Segment
-
-    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
-
-    keyword_calls = []
-
-    def fake_extract_keywords(client, segs, source_lang, target_lang):
-        keyword_calls.append(True)
-        return []
-
-    monkeypatch.setattr(analysis, "extract_keywords_for_segments", fake_extract_keywords)
-
-    fake_segments = [Segment(start=0.0, end=1.0, text="hello", words=[])]
-
-    transcript_path = tmp_path / "video_transcript.json"
-    transcript_path.write_text(_json.dumps({
-        "title": "", "subtitle": "",
-        "segments": [{"start": 0.0, "end": 1.0, "text": "hello", "words": []}],
-        "highlights": [],
-    }))
-
-    vc = VideoClipper.__new__(VideoClipper)
-    vc.llm_client = object()
-    vc.gemini_client = vc.llm_client
-    vc.segment_duration = 300
-    vc.filter_fillers = False
-    vc.max_chars = 30
-    vc.max_duration = 30.0
-
-    monkeypatch.setattr(vc, "_unload_asr_model", lambda: None)
-    monkeypatch.setattr(vc, "_filter_subtitle_segments", lambda segs, **kw: segs)
-    monkeypatch.setattr(vc, "_resolve_overlaps", lambda segs, *a: segs)
-    monkeypatch.setattr(vc, "generate_ass_subtitle", lambda *a, **kw: None)
-    monkeypatch.setattr(vc, "generate_fcpxml", lambda *a, **kw: None)
-
-    vc.process_video(
-        video_path=str(tmp_path / "video.mp4"),
-        output_dir=str(tmp_path),
-        enable_clip=False,
-        enable_highlight=False,
-        translate=False,
-        source_lang="en",
-        target_lang="en",
-        orientation="landscape",
-        subtitle_position="translated-top",
-        first_subtitle_delay=0.0,
-        max_title_chars=6,
-        max_subtitle_chars=10,
-        filter_empty_segments=True,
-        margin_left=0.0,
-        margin_right=0.0,
-        output_formats={"ass"},
-        fcpxml_frame_rate=25.0,
-        fcpxml_speed=1.0,
-        transcript_json_path=str(transcript_path),
-    )
-
-    assert keyword_calls == [], "extract_keywords_for_segments should NOT have been called"
-
-
-def test_cli_exposes_highlight_flag(monkeypatch, capsys):
-    """CLI should expose a --highlight flag."""
+def test_cli_help_omits_remote_analysis_flags(monkeypatch, capsys):
+    """CLI should no longer expose remote analysis flags."""
     import pycut.cli as cli_module
 
     monkeypatch.setattr(sys, "argv", ["pycut", "--help"])
@@ -1968,37 +1499,12 @@ def test_cli_exposes_highlight_flag(monkeypatch, capsys):
     with pytest.raises(SystemExit, match="0"):
         cli_module.main()
 
-    assert "--highlight" in capsys.readouterr().out
-
-
-def test_main_passes_enable_highlight_to_process_video(monkeypatch):
-    """main.py should pass enable_highlight=True when --highlight is specified."""
-    import pycut.cli as cli_module
-    import pycut.config as config
-    import pycut.clipper as clipper_module
-
-    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
-    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
-
-    calls = {}
-
-    def fake_process_video(self, **kwargs):
-        calls.update(kwargs)
-        return {}
-
-    monkeypatch.setattr(clipper_module.VideoClipper, "process_video", fake_process_video)
-    monkeypatch.setattr(cli_module, "_expand_video_inputs", lambda inputs: ["/fake/video.mp4"])
-
-    monkeypatch.setattr(sys, "argv", [
-        "main.py", "/fake/video.mp4",
-        "--no-clip", "--highlight",
-        "--format", "ass",
-    ])
-
-    cli_module.main()
-
-    assert calls.get("enable_highlight") is True, f"enable_highlight not True in calls: {calls}"
-    assert calls.get("enable_clip") is False, f"enable_clip not False in calls: {calls}"
+    help_output = capsys.readouterr().out
+    assert "--highlight" not in help_output
+    assert "--api-key" not in help_output
+    assert "--base-url" not in help_output
+    assert "--correct-words" not in help_output
+    assert "--no-clip" not in help_output
 
 
 def test_cli_passes_no_align_to_video_clipper(monkeypatch):
@@ -2038,7 +1544,7 @@ def test_cli_passes_no_align_to_video_clipper(monkeypatch):
 
 
 def test_cli_help_exposes_subtitle_color_defaults(monkeypatch, capsys):
-    """CLI help should document subtitle color defaults for original/translation/highlight."""
+    """CLI help should document subtitle color defaults for original/translation."""
     import pycut.cli as cli_module
 
     monkeypatch.setattr(sys, "argv", ["pycut", "--help"])
@@ -2051,8 +1557,7 @@ def test_cli_help_exposes_subtitle_color_defaults(monkeypatch, capsys):
     assert "#FFFFFF" in help_output
     assert "--translation-subtitle-color" in help_output
     assert "#FFA500" in help_output
-    assert "--highlight-subtitle-color" in help_output
-    assert "#FFFF00" in help_output
+    assert "--highlight-subtitle-color" not in help_output
 
 
 def test_main_passes_subtitle_colors_to_process_video(monkeypatch):
@@ -2078,14 +1583,12 @@ def test_main_passes_subtitle_colors_to_process_video(monkeypatch):
         "--format", "ass",
         "--original-subtitle-color", "#112233",
         "--translation-subtitle-color", "#445566",
-        "--highlight-subtitle-color", "#778899",
     ])
 
     cli_module.main()
 
     assert calls.get("original_subtitle_color") == "#112233"
     assert calls.get("translation_subtitle_color") == "#445566"
-    assert calls.get("highlight_subtitle_color") == "#778899"
 
 
 def test_cli_resolves_default_asr_model_from_source_language(monkeypatch):
@@ -2172,8 +1675,6 @@ def test_process_video_reuses_transcript_from_per_file_output_dir(monkeypatch, t
     clipper = VideoClipper.__new__(VideoClipper)
     clipper.filter_fillers = False
     clipper.segment_duration = 300
-    clipper.llm_client = None
-    clipper.gemini_model = None
     clipper.max_chars = 30
     clipper.max_duration = 30.0
 
@@ -2217,8 +1718,6 @@ def test_process_video_copies_provided_transcript_into_per_file_output_dir(monke
     clipper = VideoClipper.__new__(VideoClipper)
     clipper.filter_fillers = False
     clipper.segment_duration = 300
-    clipper.llm_client = None
-    clipper.gemini_model = None
     clipper.max_chars = 30
     clipper.max_duration = 30.0
 
@@ -2310,8 +1809,8 @@ def test_cli_help_shows_usage_examples(monkeypatch, capsys):
 
     help_output = capsys.readouterr().out
     assert "Examples:" in help_output
-    assert "pycut --translate --source-lang zh --target-lang en" in help_output
-    assert "pycut --translate --source-lang en --target-lang zh --max-chars 50 --format video --highlight --orientation portrait ~/Movies/youtube/" in help_output
+    assert "pycut --source-lang en --format json,srt" in help_output
+    assert "pycut --translate --source-lang en --target-lang zh --format video,ass --orientation portrait" in help_output
 
 
 def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
@@ -2330,7 +1829,6 @@ def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
             title="hello",
             subtitle="",
             content="hello world",
-            segment_keywords=[{"segment_id": 0, "keywords": ["world"]}],
         )
     ]
 
@@ -2343,7 +1841,6 @@ def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
         translate_fn=lambda texts, _source, _target: [f"tr:{text}" for text in texts],
         original_subtitle_color="#112233",
         translation_subtitle_color="#445566",
-        highlight_subtitle_color="#778899",
     )
 
     content = output_path.read_text(encoding="utf-8")
@@ -2352,7 +1849,7 @@ def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
     assert "Style: OriginalBottom,Arial Unicode MS,35.0,&H00332211&," in content
     assert "Style: TranslationTop,Arial Unicode MS,50.0,&H00665544&," in content
     assert "Style: TranslationBottom,Arial Unicode MS,35.0,&H00665544&," in content
-    assert r"{\c&H00998877&\fscx110\fscy110}world{\r}" in content
+    assert r"{\c" not in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,TranslationTop" in content
     assert "Dialogue: 0,0:00:01.00,0:00:02.00,OriginalBottom" in content
 
@@ -2375,7 +1872,7 @@ def test_fixture_vad_example_matches_expected_transcript():
     assert audio_path.exists()
     assert txt_path.exists()
 
-    clipper = VideoClipper(gemini_api_key=None, max_chars=30)
+    clipper = VideoClipper(max_chars=30)
     segments = clipper.transcribe_audio(str(audio_path), source_lang="zh")
 
     assert segments

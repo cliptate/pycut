@@ -4,7 +4,6 @@
 Video clipping CLI entry point.
 """
 
-import os
 import argparse
 import sys
 from pathlib import Path
@@ -61,12 +60,11 @@ def _parse_hex_color(value: str) -> str:
 def _build_clip_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Video clipping with ASR, analysis, translation, and subtitles\n\n"
-            "Export OPENAI_API_KEY={your_api_key} or use --api-key to enable AI-based highlight extraction and keyword detection.\n"
-            "Use --base-url to point at any OpenAI-compatible API (Gemini, DeepSeek, Ollama, etc.).\n\n"
+            "Local media processing with ASR, translation, subtitles, FCPXML, and rendered video output.\n\n"
             "Examples:\n"
-            "  VideoCut: pycut --translate --source-lang zh --target-lang en --max-chars 10 --no-clip --highlight --fcpxml-speed 1.1 --format fcpxml,txt ~/Movies/youtube/ \n"
-            "  Long2Short: pycut --translate --source-lang en --target-lang zh --max-chars 50 --format video --highlight --orientation portrait ~/Movies/youtube/"
+            "  Transcript: pycut --source-lang en --format json,srt ~/Movies/interview.mp4\n"
+            "  Bilingual video: pycut --translate --source-lang en --target-lang zh --format video,ass --orientation portrait ~/Movies/video.mp4\n"
+            "  Timeline: pycut --format fcpxml,json --fcpxml-speed 1.1 ~/Movies/video.mp4"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -104,13 +102,6 @@ def _build_clip_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Disable word alignment and fall back to segment-level timestamps",
     )
-    parser.add_argument("--api-key", help="OpenAI-compatible API key (or set OPENAI_API_KEY env var)")
-    parser.add_argument("--base-url", default=None,
-                        help="Base URL for OpenAI-compatible API (default: https://api.openai.com/v1)")
-    parser.add_argument("--model", default=None,
-                        help="Model name for LLM analysis (default: gpt-4o-mini)")
-    # Legacy alias kept for backward compatibility
-    parser.add_argument("--gemini-api-key", help=argparse.SUPPRESS)
     parser.add_argument("--segment-duration", type=int, default=300, help="Audio segment duration in seconds (default: 300)")
     parser.add_argument("--max-duration", type=float, default=30.0, help="Maximum subtitle segment duration in seconds (default: 30.0)")
     parser.add_argument("--max-chars", type=int, default=30, help="Maximum characters per subtitle segment (default: 30)")
@@ -131,25 +122,7 @@ def _build_clip_parser() -> argparse.ArgumentParser:
         default=config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
         help=f"Translation subtitle color in #RRGGBB format (default: {config.DEFAULT_TRANSLATION_SUBTITLE_COLOR})",
     )
-    parser.add_argument(
-        "--highlight-subtitle-color",
-        type=_parse_hex_color,
-        default=config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
-        help=f"Highlight subtitle color in #RRGGBB format (default: {config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR})",
-    )
     parser.add_argument("--first-subtitle-delay", type=float, default=1.0, help="Delay in seconds for first subtitle screen (useful for cover frame) (default: 1.0)")
-    parser.add_argument("--max-title-chars", type=int, default=6, help="Maximum characters for title (default: 6)")
-    parser.add_argument("--max-subtitle-chars", type=int, default=10, help="Maximum characters for subtitle (default: 10)")
-    parser.add_argument("--no-clip", dest="enable_clip", action="store_false",
-                        help="Disable AI highlight extraction; still split subtitles by transcript chunks")
-    parser.add_argument("--highlight", dest="enable_highlight", action="store_true",
-                        help="Enable AI keyword detection for subtitle highlighting in --no-clip mode (requires API key)")
-    parser.add_argument(
-        "--correct-words",
-        dest="correct_words",
-        action="store_true",
-        help="Use LLM to automatically correct ASR transcription errors and print a diff of changes (requires --api-key or OPENAI_API_KEY)",
-    )
     parser.add_argument("--no-filter-empty-segments", dest="filter_empty_segments", action="store_false",
                         help="Keep empty transcript segments in subtitle/FCPXML export")
     parser.add_argument("--no-filter-fillers", dest="filter_fillers", action="store_false",
@@ -161,7 +134,7 @@ def _build_clip_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--format",
         default="srt",
-        help="Comma-separated output formats: ass,srt,fcpxml,video,txt (default: srt)",
+        help="Comma-separated output formats: ass,srt,fcpxml,video,txt,json (default: srt)",
     )
     parser.add_argument("--fcpxml-frame-rate", type=float, default=25.0,
                         help="Frame rate for FCPXML export (default: 25.0)")
@@ -235,10 +208,6 @@ def _run_clip(argv: list[str]):
     except ValueError as exc:
         parser.error(str(exc))
 
-    # Get API key: --api-key > --gemini-api-key > OPENAI_API_KEY > GEMINI_API_KEY
-    api_key = args.api_key or args.gemini_api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    print(f"🔑 Using API Key: {'Provided' if api_key else 'Not Provided'}")
-
     # Initialize clipper
     resolved_asr_model = args.asr_model or _resolve_default_asr_model(args.source_lang)
     resolved_aligner_model = args.aligner_model or _resolve_default_aligner_model()
@@ -247,9 +216,6 @@ def _run_clip(argv: list[str]):
         asr_model_path=resolved_asr_model,
         aligner_model_path=resolved_aligner_model,
         enable_align=args.enable_align,
-        api_key=api_key,
-        base_url=args.base_url,
-        model=args.model,
         segment_duration=args.segment_duration,
         max_duration=args.max_duration,
         max_chars=args.max_chars,
@@ -277,13 +243,7 @@ def _run_clip(argv: list[str]):
             subtitle_position=args.subtitle_position,
             original_subtitle_color=args.original_subtitle_color,
             translation_subtitle_color=args.translation_subtitle_color,
-            highlight_subtitle_color=args.highlight_subtitle_color,
             first_subtitle_delay=args.first_subtitle_delay,
-            max_title_chars=args.max_title_chars,
-            max_subtitle_chars=args.max_subtitle_chars,
-            enable_clip=args.enable_clip,
-            enable_highlight=args.enable_highlight,
-            correct_words=args.correct_words,
             filter_empty_segments=args.filter_empty_segments,
             margin_left=args.margin_left / 1000.0,
             margin_right=args.margin_right / 1000.0,

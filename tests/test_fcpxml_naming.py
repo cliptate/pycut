@@ -13,7 +13,7 @@ from pycut.utils import Segment
 
 
 def test_generate_fcpxml_uses_source_filename_and_timestamped_event(tmp_path):
-    clipper = VideoClipper(gemini_api_key=None)
+    clipper = VideoClipper()
     output_path = tmp_path / "output.fcpxml"
     video_path = tmp_path / "demo_video.mp4"
     segments = [
@@ -80,49 +80,8 @@ def _parse_title_runs(output_path):
     return runs
 
 
-def _highlighted_text(runs):
-    return "".join(
-        run["text"]
-        for run in runs
-        if run["style"].get("fontColor") == "1 1 0 1"
-        and run["style"].get("fontSize") == "66"
-    )
-
-
-def test_generate_fcpxml_full_video_highlights_only_segment_keywords(tmp_path):
-    clipper = VideoClipper(gemini_api_key=None)
-    output_path = tmp_path / "output.fcpxml"
-    video_path = tmp_path / "demo_video.mp4"
-    segments = [
-        Segment(start=0.0, end=2.0, text="hello world"),
-    ]
-    highlights = [
-        Highlight(
-            start=0.0,
-            end=2.0,
-            title="hello",
-            subtitle="",
-            content="hello world",
-            segment_keywords=[{"segment_id": 0, "keywords": ["world"]}],
-        )
-    ]
-
-    clipper.generate_fcpxml(
-        video_path=str(video_path),
-        highlights=highlights,
-        segments=segments,
-        output_path=str(output_path),
-        enable_clip=False,
-    )
-
-    runs = _parse_title_runs(output_path)
-    assert "".join(run["text"] for run in runs) == "hello world"
-    assert _highlighted_text(runs) == "world"
-    assert _highlighted_text(runs) != "hello world"
-
-
-def test_generate_fcpxml_full_video_uses_original_segment_ids_after_filtering(tmp_path):
-    clipper = VideoClipper(gemini_api_key=None)
+def test_generate_fcpxml_full_video_uses_original_segment_text_after_filtering(tmp_path):
+    clipper = VideoClipper()
     output_path = tmp_path / "output.fcpxml"
     video_path = tmp_path / "demo_video.mp4"
     segments = [
@@ -136,7 +95,6 @@ def test_generate_fcpxml_full_video_uses_original_segment_ids_after_filtering(tm
             title="hello",
             subtitle="",
             content="hello world",
-            segment_keywords=[{"segment_id": 1, "keywords": ["world"]}],
         )
     ]
 
@@ -150,11 +108,10 @@ def test_generate_fcpxml_full_video_uses_original_segment_ids_after_filtering(tm
 
     runs = _parse_title_runs(output_path)
     assert "".join(run["text"] for run in runs) == "hello world"
-    assert _highlighted_text(runs) == "world"
 
 
-def test_generate_fcpxml_clip_mode_highlights_only_segment_keywords(tmp_path):
-    clipper = VideoClipper(gemini_api_key=None)
+def test_generate_fcpxml_clip_mode_writes_segment_text(tmp_path):
+    clipper = VideoClipper()
     output_path = tmp_path / "output.fcpxml"
     video_path = tmp_path / "demo_video.mp4"
     segments = [
@@ -167,7 +124,6 @@ def test_generate_fcpxml_clip_mode_highlights_only_segment_keywords(tmp_path):
             title="hello",
             subtitle="",
             content="hello world",
-            segment_keywords=[{"segment_id": 0, "keywords": ["world"]}],
         )
     ]
 
@@ -181,8 +137,6 @@ def test_generate_fcpxml_clip_mode_highlights_only_segment_keywords(tmp_path):
 
     runs = _parse_title_runs(output_path)
     assert "".join(run["text"] for run in runs) == "hello world"
-    assert _highlighted_text(runs) == "world"
-    assert _highlighted_text(runs) != "hello world"
 
 
 def test_generate_fcpxml_escapes_xml_special_characters_in_clip_titles(tmp_path):
@@ -202,7 +156,6 @@ def test_generate_fcpxml_escapes_xml_special_characters_in_clip_titles(tmp_path)
             title=source_text,
             subtitle=translation_text,
             content=source_text,
-            segment_keywords=[{"segment_id": 0, "keywords": ['"hi" & <world>']}],
         )
     ]
 
@@ -229,14 +182,13 @@ def test_generate_fcpxml_escapes_xml_special_characters_in_clip_titles(tmp_path)
 
     runs = _parse_title_runs(output_path)
     assert "".join(run["text"] for run in runs) == f'{source_text}\n{translation_text}'
-    assert _highlighted_text(runs) == '"hi" & <world>'
 
     assert 'name="Say &quot;hi&quot; &amp; &lt;world&gt; &gt; friends"' in content
     assert '&quot;hi&quot; &amp; &lt;world&gt;' in content
     assert '译文 "1 &lt; 2" &amp; friends' in content
 
 
-def test_generate_fcpxml_uses_configured_original_translation_and_highlight_colors(tmp_path):
+def test_generate_fcpxml_uses_configured_original_and_translation_colors(tmp_path):
     import pycut.fcpxml as fcpxml
 
     output_path = tmp_path / "output.fcpxml"
@@ -251,7 +203,6 @@ def test_generate_fcpxml_uses_configured_original_translation_and_highlight_colo
             title="hello",
             subtitle="",
             content="hello world",
-            segment_keywords=[{"segment_id": 0, "keywords": ["world"]}],
         )
     ]
 
@@ -265,14 +216,11 @@ def test_generate_fcpxml_uses_configured_original_translation_and_highlight_colo
         translate_fn=lambda texts, _source, _target: [f"tr:{text}" for text in texts],
         original_subtitle_color="#123456",
         translation_subtitle_color="#ABCDEF",
-        highlight_subtitle_color="#FEDCBA",
     )
 
     runs = _parse_title_runs(output_path)
     content = output_path.read_text(encoding="utf-8")
 
     assert "".join(run["text"] for run in runs) == "hello world\ntr:hello world"
-    assert _highlighted_text(runs) == ""
     assert 'fontColor="0.0706 0.2039 0.3373 1"' in content
-    assert 'fontColor="0.9961 0.8627 0.7294 1"' in content
     assert 'fontColor="0.6706 0.8039 0.9373 1"' in content

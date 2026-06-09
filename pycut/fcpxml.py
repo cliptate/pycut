@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import math
-import re
 import subprocess
 from html import escape
 from pathlib import Path
@@ -68,10 +67,8 @@ def build_fcpxml_title(
     fps_int: int,
     style_id: int,
     orientation: str,
-    segment_keywords: Optional[List[str]] = None,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-    highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
 ) -> str:
     """Return an FCPXML ``<title>`` element string for one subtitle segment."""
 
@@ -86,19 +83,14 @@ def build_fcpxml_title(
     vertical_pos = -33 if orientation == "landscape" else -13
     original_color = hex_color_to_fcpxml(original_subtitle_color)
     translation_color = hex_color_to_fcpxml(translation_subtitle_color)
-    highlight_color = hex_color_to_fcpxml(highlight_subtitle_color)
     name_attr = (text[:50] if text else f"s{style_id}") or f"s{style_id}"
-    source_runs = split_source_text_runs(text, segment_keywords or [])
-    has_highlighted_source = any(is_highlighted for _, is_highlighted in source_runs)
     lines = [
         f'              <title ref="r3" name="{xml_attr(name_attr)}" lane="1"'
         f' offset="{offset_frames}/{fps_int}s"'
         f' duration="{duration_frames}/{fps_int}s">',
         "                <text>",
+        f'                  <text-style ref="ts{style_id}">{xml_text(text)}</text-style>',
     ]
-    for fragment, is_highlighted in source_runs:
-        ref = f"ts{style_id}_h" if is_highlighted else f"ts{style_id}"
-        lines.append(f'                  <text-style ref="{ref}">{xml_text(fragment)}</text-style>')
     if translation:
         lines += [
             "                  <text-style>&#xA;</text-style>",
@@ -113,15 +105,6 @@ def build_fcpxml_title(
         f' shadowColor="0 0 0 0.5" shadowOffset="2 315" alignment="center"/>',
         "                </text-style-def>",
     ]
-    if has_highlighted_source:
-        lines += [
-            f'                <text-style-def id="ts{style_id}_h">',
-            f'                  <text-style font="Arial Unicode MS" fontSize="{font_size * 1.1:g}"'
-            f' fontFace="Regular" fontColor="{highlight_color}" bold="1" italic="0"'
-            f' strokeColor="0 0 0 1" strokeWidth="-1"'
-            f' shadowColor="0 0 0 0.5" shadowOffset="2 315" alignment="center"/>',
-            "                </text-style-def>",
-        ]
     if translation:
         lines += [
             f'                <text-style-def id="ts{style_id}_t">',
@@ -136,50 +119,6 @@ def build_fcpxml_title(
         "              </title>",
     ]
     return "\n".join(lines)
-
-
-def split_source_text_runs(text: str, keywords: List[str]) -> List[tuple[str, bool]]:
-    """Split source text into alternating normal and highlighted runs."""
-    if not text:
-        return []
-
-    sorted_keywords = sorted((keyword for keyword in keywords if keyword), key=len, reverse=True)
-    escaped_keywords = [re.escape(keyword) for keyword in sorted_keywords]
-    pattern = "|".join(escaped_keywords)
-    if not pattern:
-        return [(text, False)]
-
-    runs: List[tuple[str, bool]] = []
-    last_end = 0
-    for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-        if match.start() > last_end:
-            normal_fragment = text[last_end:match.start()]
-            if normal_fragment:
-                runs.append((normal_fragment, False))
-        highlighted_fragment = match.group(0)
-        if highlighted_fragment:
-            runs.append((highlighted_fragment, True))
-        last_end = match.end()
-
-    if last_end < len(text):
-        trailing_fragment = text[last_end:]
-        if trailing_fragment:
-            runs.append((trailing_fragment, False))
-
-    return runs or [(text, False)]
-
-
-def build_segment_keyword_map(highlights: List[Highlight]) -> dict[int, List[str]]:
-    """Return a lookup of segment id to highlight keywords."""
-    segment_keywords_map: dict[int, List[str]] = {}
-    for highlight in highlights:
-        for segment_keywords in highlight.segment_keywords or []:
-            segment_id = segment_keywords.get("segment_id")
-            keywords = [keyword for keyword in segment_keywords.get("keywords", []) if keyword]
-            if segment_id is None or not keywords:
-                continue
-            segment_keywords_map.setdefault(segment_id, []).extend(keywords)
-    return segment_keywords_map
 
 
 def generate_fcpxml(
@@ -198,7 +137,6 @@ def generate_fcpxml(
     translate_fn: Optional[Callable[[List[str], str, str], List[str]]] = None,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
-    highlight_subtitle_color: str = config.DEFAULT_HIGHLIGHT_SUBTITLE_COLOR,
 ) -> str:
     """Generate an FCPXML file for Final Cut Pro or DaVinci Resolve.
 
@@ -307,8 +245,6 @@ def generate_fcpxml(
     ]
 
     style_id = 1
-    segment_index_map = {id(segment): idx for idx, segment in enumerate(segments)}
-    segment_keywords_map = build_segment_keyword_map(highlights)
     if enable_clip and highlights:
         timeline_off = 0
         last_end_f = 0
@@ -341,7 +277,6 @@ def generate_fcpxml(
                         )
                     timeline_off += gap_f
             translation = trans_list[i] if i < len(trans_list) else ""
-            segment_id = segment_index_map.get(id(seg))
             clip_lines = [
                 f'            <asset-clip ref="r2" offset="{ft(timeline_off)}"'
                 f' duration="{ft(dur_f)}" start="{ft(start_f)}"'
@@ -358,12 +293,8 @@ def generate_fcpxml(
                     fps_int,
                     style_id,
                     orientation,
-                    segment_keywords=(
-                        segment_keywords_map.get(segment_id, []) if segment_id is not None else []
-                    ),
                     original_subtitle_color=original_subtitle_color,
                     translation_subtitle_color=translation_subtitle_color,
-                    highlight_subtitle_color=highlight_subtitle_color,
                 ),
                 "            </asset-clip>",
             ]
@@ -385,7 +316,6 @@ def generate_fcpxml(
             if dur_f <= 0:
                 continue
             translation = trans_list[i] if i < len(trans_list) else ""
-            segment_id = segment_index_map.get(id(seg))
             buf.append(
                 build_fcpxml_title(
                     seg.text,
@@ -395,12 +325,8 @@ def generate_fcpxml(
                     fps_int,
                     style_id,
                     orientation,
-                    segment_keywords=(
-                        segment_keywords_map.get(segment_id, []) if segment_id is not None else []
-                    ),
                     original_subtitle_color=original_subtitle_color,
                     translation_subtitle_color=translation_subtitle_color,
-                    highlight_subtitle_color=highlight_subtitle_color,
                 )
             )
             style_id += 1
