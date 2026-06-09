@@ -160,11 +160,10 @@ class VoxCPMTTSHelper:
 
 
 def create_tts_helper(*, model_path: str | None = None, device: Optional[str] = None):
-    config.ensure_supported_runtime()
-    backend = config.select_tts_backend()
-    if backend == "mlx":
-        return MLXTTSHelper(model_path=model_path or config.resolve_default_mlx_tts_model())
-    return VoxCPMTTSHelper(model_path=model_path or config.resolve_default_voxcpm_tts_model(), device=device)
+    runtime_profile = config.current_runtime_profile()
+    if runtime_profile.tts_backend == "mlx":
+        return MLXTTSHelper(model_path=model_path or runtime_profile.default_tts_model())
+    return VoxCPMTTSHelper(model_path=model_path or runtime_profile.default_tts_model(), device=device)
 
 
 def synthesize_text_to_wav(

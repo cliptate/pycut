@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Iterable, List
+from typing import Iterable, List, Tuple
 
 from pycut.utils import Segment
 
@@ -78,6 +78,38 @@ def split_transcript_segments(
     return chunks
 
 
+def split_timeline_cues(
+    cues: Iterable[TimelineCue],
+    max_duration: float,
+) -> List[List[TimelineCue]]:
+    """Split timeline cues into chunks with a maximum source duration."""
+    cue_list = list(cues)
+    if not cue_list:
+        return []
+
+    chunks: List[List[TimelineCue]] = []
+    current: List[TimelineCue] = []
+    chunk_start = None
+
+    for cue in cue_list:
+        if not current:
+            current = [cue]
+            chunk_start = cue.start
+            continue
+
+        if chunk_start is not None and cue.end - chunk_start <= max_duration:
+            current.append(cue)
+        else:
+            chunks.append(current)
+            current = [cue]
+            chunk_start = cue.start
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
 def resolve_overlaps(
     segments: Iterable[Segment],
     margin_left: float = 0.0,
@@ -136,6 +168,28 @@ def prepare_timeline(
         for seg in resolved
     ]
     return TranscriptTimeline(cues=cues, title=title, subtitle=subtitle)
+
+
+def prepare_export_timeline(
+    timeline: TranscriptTimeline,
+    max_duration: float,
+) -> Tuple[TranscriptTimeline, List[List[TimelineCue]]]:
+    """Return the export-ready timeline and cue chunks without leaving the timeline interface."""
+    chunks = split_timeline_cues(timeline.cues, max_duration)
+    cues = [cue for chunk in chunks for cue in chunk]
+    return TranscriptTimeline(
+        cues=[
+            TimelineCue(
+                start=cue.start,
+                end=cue.end,
+                text=cue.text,
+                words=list(cue.words or []),
+            )
+            for cue in cues
+        ],
+        title=timeline.title,
+        subtitle=timeline.subtitle,
+    ), chunks
 
 
 def timeline_to_segments(timeline: TranscriptTimeline) -> List[Segment]:

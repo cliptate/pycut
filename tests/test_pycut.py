@@ -1317,6 +1317,90 @@ def test_prepare_timeline_filters_margins_and_resolves_overlaps():
     assert timeline.cues[0].end <= timeline.cues[1].start
 
 
+def test_prepare_export_timeline_keeps_timeline_interface():
+    from pycut.timeline import TimelineCue, TranscriptTimeline, prepare_export_timeline
+
+    timeline = TranscriptTimeline(
+        cues=[
+            TimelineCue(start=0.0, end=1.0, text="first"),
+            TimelineCue(start=1.0, end=2.0, text="second"),
+        ],
+        title="stored title",
+        subtitle="stored subtitle",
+    )
+
+    export_timeline, chunks = prepare_export_timeline(timeline, max_duration=1.5)
+
+    assert export_timeline.title == "stored title"
+    assert export_timeline.subtitle == "stored subtitle"
+    assert [cue.text for cue in export_timeline.cues] == ["first", "second"]
+    assert [[cue.text for cue in chunk] for chunk in chunks] == [["first"], ["second"]]
+
+
+def test_media_job_workflow_uses_provided_transcript_without_video_dependencies(tmp_path):
+    import json as _json
+
+    from pycut.media_job import MediaJob
+    from pycut.media_workflow import MediaJobWorkflow, WorkflowAdapters
+
+    provided_transcript = tmp_path / "provided.json"
+    provided_transcript.write_text(
+        _json.dumps({
+            "title": "stored title",
+            "subtitle": "stored subtitle",
+            "segments": [{"start": 0.0, "end": 1.0, "text": "provided", "words": []}],
+        }),
+        encoding="utf-8",
+    )
+
+    events = []
+
+    adapters = WorkflowAdapters(
+        extract_audio=lambda *_: events.append("extract"),
+        transcribe_audio=lambda *_args, **_kwargs: pytest.fail("ASR should not run"),
+        unload_asr_model=lambda: events.append("unload"),
+        generate_ass_subtitle=lambda *_args, **_kwargs: pytest.fail("ASS should not run"),
+        generate_fcpxml=lambda *_args, **_kwargs: pytest.fail("FCPXML should not run"),
+        render_video_with_subtitles_complex=lambda *_args, **_kwargs: pytest.fail("render should not run"),
+    )
+    job = MediaJob(
+        video_path=str(tmp_path / "demo.mp4"),
+        output_dir=str(tmp_path / "demo"),
+        output_formats=["json"],
+        transcript_json_path=str(provided_transcript),
+    )
+
+    results = MediaJobWorkflow(job, adapters=adapters, segment_duration=300).run()
+
+    expected_path = tmp_path / "demo" / "demo_transcript.json"
+    assert events == []
+    assert results == {"transcript": str(expected_path)}
+    assert _json.loads(expected_path.read_text(encoding="utf-8"))["segments"][0]["text"] == "provided"
+
+
+def test_runtime_profile_resolves_backend_specific_defaults(monkeypatch):
+    import pycut.config as config
+
+    monkeypatch.setattr(config, "resolve_default_qwen_asr_model", lambda: "cached-qwen-asr")
+    monkeypatch.setattr(config, "resolve_default_qwen_aligner_model", lambda: "cached-qwen-aligner")
+    monkeypatch.setattr(config, "resolve_default_mlx_tts_model", lambda: "cached-mlx-tts")
+    monkeypatch.setattr(config, "resolve_default_voxcpm_tts_model", lambda: "cached-voxcpm")
+
+    mac_profile = config.current_runtime_profile(system="Darwin", machine="arm64")
+    assert mac_profile.asr_backend == "mlx"
+    assert mac_profile.tts_backend == "mlx"
+    assert mac_profile.default_asr_model("zh-CN") == config.DEFAULT_CHINESE_ASR_MODEL
+    assert mac_profile.default_aligner_model() == config.DEFAULT_ALIGNER_MODEL
+    assert mac_profile.default_tts_model() == "cached-mlx-tts"
+
+    linux_profile = config.current_runtime_profile(system="Linux", machine="x86_64")
+    assert linux_profile.asr_backend == "qwen"
+    assert linux_profile.tts_backend == "voxcpm"
+    assert linux_profile.default_asr_model("en") == "cached-qwen-asr"
+    assert linux_profile.default_aligner_model() == "cached-qwen-aligner"
+    assert linux_profile.default_tts_model() == "cached-voxcpm"
+
+
 
 class TestProcessVideoTranscriptInput:
     def test_extract_audio_not_called_when_transcript_provided(self):

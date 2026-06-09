@@ -19,27 +19,15 @@ from pycut.video_io import (
 
 
 def _resolve_default_asr_model(source_lang: str) -> str:
-    if config.select_asr_backend() == "qwen":
-        return config.resolve_default_qwen_asr_model()
-
-    normalized = (source_lang or "").strip().lower()
-    if normalized.startswith("zh"):
-        return config.DEFAULT_CHINESE_ASR_MODEL
-    if normalized.startswith("en"):
-        return config.DEFAULT_EN_ASR_MODEL
-    return config.DEFAULT_FALLBACK_ASR_MODEL
+    return config.current_runtime_profile().default_asr_model(source_lang)
 
 
 def _resolve_default_aligner_model() -> str:
-    if config.select_asr_backend() == "qwen":
-        return config.resolve_default_qwen_aligner_model()
-    return config.DEFAULT_ALIGNER_MODEL
+    return config.current_runtime_profile().default_aligner_model()
 
 
 def _resolve_default_tts_model() -> str:
-    if config.select_tts_backend() == "mlx":
-        return config.resolve_default_mlx_tts_model()
-    return config.resolve_default_voxcpm_tts_model()
+    return config.current_runtime_profile().default_tts_model()
 
 
 def _resolve_output_dir(video_path: str, explicit_output_dir: str | None) -> str:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+from dataclasses import dataclass
 from pathlib import Path
 
 APPLE_SILICON_MACHINES = frozenset({"arm64", "aarch64"})
@@ -25,6 +26,37 @@ DEFAULT_VOXCPM_TTS_MODEL = "openbmb/VoxCPM2"
 DEFAULT_TRANSLATION_BACKEND = "py-googletrans"
 DEFAULT_ORIGINAL_SUBTITLE_COLOR = "#FFFFFF"
 DEFAULT_TRANSLATION_SUBTITLE_COLOR = "#FFA500"
+
+
+@dataclass(frozen=True)
+class RuntimeProfile:
+    """Resolved platform profile for model backend and default model decisions."""
+
+    system: str
+    machine: str
+    asr_backend: str
+    tts_backend: str
+
+    def default_asr_model(self, source_lang: str = "en") -> str:
+        if self.asr_backend == "qwen":
+            return resolve_default_qwen_asr_model()
+
+        normalized = (source_lang or "").strip().lower()
+        if normalized.startswith("zh"):
+            return DEFAULT_CHINESE_ASR_MODEL
+        if normalized.startswith("en"):
+            return DEFAULT_EN_ASR_MODEL
+        return DEFAULT_FALLBACK_ASR_MODEL
+
+    def default_aligner_model(self) -> str:
+        if self.asr_backend == "qwen":
+            return resolve_default_qwen_aligner_model()
+        return DEFAULT_ALIGNER_MODEL
+
+    def default_tts_model(self) -> str:
+        if self.tts_backend == "mlx":
+            return resolve_default_mlx_tts_model()
+        return resolve_default_voxcpm_tts_model()
 
 
 def _hf_hub_cache_dir() -> Path:
@@ -158,6 +190,18 @@ def select_tts_backend(system: str | None = None, machine: str | None = None) ->
         return "voxcpm"
     ensure_supported_runtime(system=system, machine=machine)
     raise AssertionError("unreachable")
+
+
+def current_runtime_profile(system: str | None = None, machine: str | None = None) -> RuntimeProfile:
+    ensure_supported_runtime(system=system, machine=machine)
+    resolved_system = _normalized_system(system)
+    resolved_machine = _normalized_machine(machine)
+    return RuntimeProfile(
+        system=resolved_system,
+        machine=resolved_machine,
+        asr_backend=select_asr_backend(system=system, machine=machine),
+        tts_backend=select_tts_backend(system=system, machine=machine),
+    )
 
 
 def ensure_supported_runtime(system: str | None = None, machine: str | None = None) -> None:
