@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import subprocess
 import tempfile
-from dataclasses import replace
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -21,18 +19,20 @@ import pycut.fcpxml as fcpxml_mod
 import pycut.renderer as renderer_mod
 import pycut.subtitle as subtitle_mod
 from pycut.asr import MLXASRHelper, QwenASRHelper
-from pycut.models import Highlight
+from pycut.media_job import MediaJob
+from pycut.timeline import (
+    TranscriptTimeline,
+    prepare_timeline,
+    split_transcript_segments,
+    timeline_to_segments,
+)
+from pycut.transcript_store import TranscriptMetadata, TranscriptStore
 from pycut.translation import GoogleTranslator
 from pycut.utils import (
     Segment,
     _segments_to_srt,
     extract_audio,
     get_audio_duration,
-)
-from pycut.video_io import (
-    DEFAULT_OUTPUT_FORMATS,
-    _load_segments_from_transcript_json,
-    _normalize_output_formats,
 )
 
 
@@ -122,7 +122,7 @@ class VideoClipper:
     def render_video_with_subtitles_complex(
         self,
         video_path: str,
-        highlights: List[Highlight],
+        timeline: TranscriptTimeline,
         subtitle_path: str,
         output_path: str,
         orientation: str = "landscape",
@@ -130,7 +130,7 @@ class VideoClipper:
     ) -> str:
         return renderer_mod.render_video_with_subtitles_complex(
             video_path=video_path,
-            highlights=highlights,
+            timeline=timeline,
             subtitle_path=subtitle_path,
             output_path=output_path,
             orientation=orientation,
@@ -174,64 +174,19 @@ class VideoClipper:
         max_duration: float,
     ) -> List[List[Segment]]:
         """Split transcription segments into chunks with max duration."""
-        if not segments:
-            return []
-
-        chunks: List[List[Segment]] = []
-        current: List[Segment] = []
-        chunk_start = None
-
-        for seg in segments:
-            if not current:
-                current = [seg]
-                chunk_start = seg.start
-                continue
-
-            if chunk_start is not None and seg.end - chunk_start <= max_duration:
-                current.append(seg)
-            else:
-                chunks.append(current)
-                current = [seg]
-                chunk_start = seg.start
-
-        if current:
-            chunks.append(current)
-
-        return chunks
+        return split_transcript_segments(segments, max_duration)
 
     @staticmethod
     def _resolve_overlaps(segments: List[Segment], margin_left: float = 0.0, margin_right: float = 0.0) -> List[Segment]:
         """Apply per-segment margin offsets then resolve any overlaps using midpoint splitting."""
-        if not segments:
-            return []
-
-        # Apply margins first
-        shifted = [
-            replace(seg, start=max(0.0, seg.start + margin_left), end=max(0.0, seg.end + margin_right))
-            for seg in segments
-        ]
-
-        # Resolve overlaps between adjacent segments
-        resolved = []
-        overlap_count = 0
-        for i, seg in enumerate(shifted):
-            start = seg.start
-            end = seg.end
-            if resolved:
-                prev = resolved[-1]
-                if start < prev.end:
-                    mid = (prev.end + start) / 2
-                    resolved[-1] = replace(prev, end=mid)
-                    start = mid
-                    overlap_count += 1
-            if i + 1 < len(shifted):
-                next_seg = shifted[i + 1]
-                if end > next_seg.start:
-                    end = (end + next_seg.start) / 2
-            resolved.append(replace(seg, start=start, end=end))
-        if overlap_count > 0:
-            print(f"🔧 Resolved {overlap_count} overlapping segment(s) using midpoint split")
-        return resolved
+        return timeline_to_segments(
+            prepare_timeline(
+                segments,
+                filter_empty_segments=False,
+                margin_left=margin_left,
+                margin_right=margin_right,
+            )
+        )
 
     def _filter_subtitle_segments(
         self,
@@ -239,14 +194,9 @@ class VideoClipper:
         filter_empty_segments: bool = True,
     ) -> List[Segment]:
         """Filter empty segments and resolve any overlaps."""
-        if filter_empty_segments:
-            filtered = [seg for seg in segments if str(getattr(seg, "text", "") or "").strip()]
-            removed = len(segments) - len(filtered)
-            if removed > 0:
-                print(f"🧹 Filtered {removed} empty subtitle segment(s)")
-        else:
-            filtered = list(segments)
-        return self._resolve_overlaps(filtered)
+        return timeline_to_segments(
+            prepare_timeline(segments, filter_empty_segments=filter_empty_segments)
+        )
     
     def transcribe_audio(self, audio_path: str, orientation: str = "landscape", source_lang: str = "en") -> List[Segment]:
         """Transcribe audio file with word-level timestamps."""
@@ -300,8 +250,7 @@ class VideoClipper:
     
     def generate_ass_subtitle(
         self,
-        highlights: List[Highlight],
-        segments: List[Segment],
+        timeline: TranscriptTimeline,
         output_path: str,
         translate: bool = False,
         source_lang: str = "zh",
@@ -315,8 +264,7 @@ class VideoClipper:
         """Generate ASS subtitle file with multi-layer support."""
         translate_fn = self.translate_texts_bulk if translate else None
         return subtitle_mod.generate_ass_subtitle(
-            highlights,
-            segments,
+            timeline,
             output_path,
             translate=translate,
             source_lang=source_lang,
@@ -339,14 +287,10 @@ class VideoClipper:
     def _build_fcpxml_timemap(self, start_f, timeline_dur_f, source_dur_f, fps_int):
         return fcpxml_mod.build_fcpxml_timemap(start_f, timeline_dur_f, source_dur_f, fps_int)
 
-    def _build_fcpxml_title(self, text, translation, offset_frames, duration_frames, fps_int, style_id, orientation):
-        return fcpxml_mod.build_fcpxml_title(text, translation, offset_frames, duration_frames, fps_int, style_id, orientation)
-
     def generate_fcpxml(
         self,
         video_path: str,
-        highlights: List[Highlight],
-        segments: List[Segment],
+        timeline: TranscriptTimeline,
         output_path: str,
         frame_rate: float = 25.0,
         speed: float = 1.0,
@@ -354,15 +298,12 @@ class VideoClipper:
         source_lang: str = "zh",
         target_lang: str = "en",
         orientation: str = "landscape",
-        enable_clip: bool = True,
-        filter_empty_segments: bool = True,
         original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
         translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
     ) -> str:
         return fcpxml_mod.generate_fcpxml(
             video_path=video_path,
-            highlights=highlights,
-            segments=segments,
+            timeline=timeline,
             output_path=output_path,
             frame_rate=frame_rate,
             speed=speed,
@@ -370,8 +311,6 @@ class VideoClipper:
             source_lang=source_lang,
             target_lang=target_lang,
             orientation=orientation,
-            enable_clip=enable_clip,
-            filter_empty_segments=filter_empty_segments,
             translate_fn=self.translate_texts_bulk if translate else None,
             original_subtitle_color=original_subtitle_color,
             translation_subtitle_color=translation_subtitle_color,
@@ -403,17 +342,33 @@ class VideoClipper:
         print(f"🎥 Processing video: {video_path}")
         print(f"{'='*60}\n")
         
-        output_dir = str(Path(output_dir))
+        job = MediaJob(
+            video_path=video_path,
+            output_dir=str(Path(output_dir)),
+            translate=translate,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            orientation=orientation,
+            subtitle_position=subtitle_position,
+            first_subtitle_delay=first_subtitle_delay,
+            original_subtitle_color=original_subtitle_color,
+            translation_subtitle_color=translation_subtitle_color,
+            filter_empty_segments=filter_empty_segments,
+            margin_left=margin_left,
+            margin_right=margin_right,
+            output_formats=output_formats,
+            export_fcpxml=export_fcpxml,
+            fcpxml_frame_rate=fcpxml_frame_rate,
+            fcpxml_speed=fcpxml_speed,
+            transcript_json_path=transcript_json_path,
+        )
+
+        output_dir = job.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        video_name = Path(video_path).stem
+        video_name = job.video_name
         
         results = {}
-        if output_formats is None:
-            selected_formats = {"fcpxml"} if export_fcpxml else set(DEFAULT_OUTPUT_FORMATS)
-        else:
-            selected_formats = set(_normalize_output_formats(output_formats))
-            if export_fcpxml:
-                selected_formats.add("fcpxml")
+        selected_formats = job.selected_formats()
         want_ass = "ass" in selected_formats
         want_srt = "srt" in selected_formats
         want_fcpxml = "fcpxml" in selected_formats
@@ -422,21 +377,18 @@ class VideoClipper:
         want_json = "json" in selected_formats
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            transcript_path = os.path.join(output_dir, f"{video_name}_transcript.json")
-            transcript_meta = {"title": "", "subtitle": "", "highlights": []}
+            transcript_store = job.transcript_store()
+            transcript_path = str(transcript_store.path)
+            transcript_metadata = TranscriptMetadata()
 
-            if transcript_json_path:
-                # Use provided JSON — skip ASR entirely
-                segments, transcript_meta = _load_segments_from_transcript_json(transcript_json_path)
-                print(f"📂 Using provided transcript: {transcript_json_path}")
-                # Copy to output dir for reference if not already there
-                resolved_src = os.path.realpath(transcript_json_path)
-                resolved_dst = os.path.realpath(transcript_path) if os.path.exists(transcript_path) else None
-                if resolved_dst != resolved_src:
-                    import shutil
-                    shutil.copy2(transcript_json_path, transcript_path)
-            elif os.path.exists(transcript_path):
-                segments, transcript_meta = _load_segments_from_transcript_json(transcript_path)
+            if job.transcript_json_path:
+                transcript_document = transcript_store.load_provided(job.transcript_json_path)
+                segments = transcript_document.segments
+                transcript_metadata = transcript_document.metadata
+                print(f"📂 Using provided transcript: {job.transcript_json_path}")
+            elif (transcript_document := transcript_store.load_existing()) is not None:
+                segments = transcript_document.segments
+                transcript_metadata = transcript_document.metadata
                 print(f"♻️  Reusing existing transcript: {transcript_path}")
             else:
                 # Step 1: Extract audio (skip if input is already an audio file)
@@ -445,34 +397,39 @@ class VideoClipper:
 
                 # Step 2: Transcribe audio (ASR model loaded on demand)
                 try:
-                    segments = self.transcribe_audio(audio_path, orientation=orientation, source_lang=source_lang)
+                    segments = self.transcribe_audio(audio_path, orientation=job.orientation, source_lang=job.source_lang)
                 finally:
                     # ASR/aligner are only needed for transcription. Release them before exports.
                     self._unload_asr_model()
 
-                # Save transcription in new metadata-wrapped format
-                transcript_data = {
-                    "title": "",
-                    "subtitle": "",
-                    "segments": [{"start": s.start, "end": s.end, "text": s.text, "words": s.words or []} for s in segments],
-                    "highlights": []
-                }
-                with open(transcript_path, "w", encoding="utf-8") as f:
-                    json.dump(transcript_data, f, ensure_ascii=False, indent=2)
+                transcript_store.save(segments, metadata=transcript_metadata)
                 print(f"💾 Transcription saved to {transcript_path}")
 
-            subtitle_segments = self._filter_subtitle_segments(segments, filter_empty_segments=filter_empty_segments)
-            if margin_left != 0.0 or margin_right != 0.0:
-                subtitle_segments = self._resolve_overlaps(subtitle_segments, margin_left, margin_right)
-                print(f"⏱️  Applied margin: left={margin_left*1000:.0f}ms, right={margin_right*1000:.0f}ms")
+            removed_segments = (
+                len([seg for seg in segments if not str(getattr(seg, "text", "") or "").strip()])
+                if filter_empty_segments
+                else 0
+            )
+            if removed_segments > 0:
+                print(f"🧹 Filtered {removed_segments} empty subtitle segment(s)")
+            timeline = prepare_timeline(
+                segments,
+                title=transcript_metadata.title,
+                subtitle=transcript_metadata.subtitle,
+                filter_empty_segments=job.filter_empty_segments,
+                margin_left=job.margin_left,
+                margin_right=job.margin_right,
+            )
+            if job.margin_left != 0.0 or job.margin_right != 0.0:
+                print(f"⏱️  Applied margin: left={job.margin_left*1000:.0f}ms, right={job.margin_right*1000:.0f}ms")
             results["transcript"] = transcript_path
 
             if want_json and not (want_ass or want_srt or want_fcpxml or want_video or want_txt):
                 return results
 
             if want_txt:
-                txt_path = os.path.join(output_dir, f"{video_name}.txt")
-                full_text = "\n".join(seg.text.strip() for seg in subtitle_segments if seg.text.strip())
+                txt_path = job.output_path(".txt")
+                full_text = "\n".join(timeline.text_lines())
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(full_text)
                     if full_text:
@@ -481,35 +438,22 @@ class VideoClipper:
                 print(f"💾 Plain text saved to {txt_path}")
 
             print("\n📹 Local timeline mode: exporting transcript-based outputs")
-            chunked_segments = self.split_transcript_segments(subtitle_segments, float(self.segment_duration))
+            timeline_segments = timeline_to_segments(timeline)
+            chunked_segments = self.split_transcript_segments(timeline_segments, float(self.segment_duration))
             print(f"✂️  Splitting transcript into {len(chunked_segments)} chunks (<= {self.segment_duration}s)")
             merged_segments = [seg for chunk in chunked_segments for seg in chunk]
+            export_timeline = prepare_timeline(
+                merged_segments,
+                title=timeline.title,
+                subtitle=timeline.subtitle,
+                filter_empty_segments=False,
+            )
 
-            if merged_segments:
-                if self.filter_fillers:
-                    merged_highlights = [
-                        Highlight(
-                            start=seg.start,
-                            end=seg.end,
-                            title="",
-                            subtitle="",
-                            content="",
-                        )
-                        for seg in merged_segments
-                    ]
-                else:
-                    merged_highlights = [Highlight(
-                        start=merged_segments[0].start,
-                        end=merged_segments[-1].end,
-                        title=transcript_meta.get("title", ""),
-                        subtitle=transcript_meta.get("subtitle", ""),
-                        content="",
-                    )]
-
+            if export_timeline.cues:
                 if want_srt:
-                    srt_path = os.path.join(output_dir, f"{video_name}_subtitles.srt")
+                    srt_path = job.output_path("_subtitles.srt")
                     srt_content = _segments_to_srt(
-                        [(s.start, s.end, s.text) for s in merged_segments if s.text.strip()]
+                        [(cue.start, cue.end, cue.text) for cue in export_timeline.cues if cue.text.strip()]
                     )
                     with open(srt_path, "w", encoding="utf-8") as f:
                         f.write(srt_content)
@@ -518,52 +462,49 @@ class VideoClipper:
                 subtitle_path: Optional[str] = None
                 if want_ass or want_video:
                     subtitle_path = (
-                        os.path.join(output_dir, f"{video_name}_subtitles.ass")
+                        job.output_path("_subtitles.ass")
                         if want_ass
                         else os.path.join(tmpdir, f"{video_name}_subtitles.ass")
                     )
                     self.generate_ass_subtitle(
-                        merged_highlights, merged_segments, subtitle_path,
-                        translate=translate,
-                        source_lang=source_lang,
-                        target_lang=target_lang,
-                        orientation=orientation,
-                        subtitle_position=subtitle_position,
+                        export_timeline, subtitle_path,
+                        translate=job.translate,
+                        source_lang=job.source_lang,
+                        target_lang=job.target_lang,
+                        orientation=job.orientation,
+                        subtitle_position=job.subtitle_position,
                         first_subtitle_delay=0.0,
-                        original_subtitle_color=original_subtitle_color,
-                        translation_subtitle_color=translation_subtitle_color,
+                        original_subtitle_color=job.original_subtitle_color,
+                        translation_subtitle_color=job.translation_subtitle_color,
                     )
                     if want_ass:
                         results["subtitles"] = subtitle_path
 
                 if want_fcpxml:
-                    fcpxml_path = os.path.join(output_dir, f"{video_name}.fcpxml")
+                    fcpxml_path = job.output_path(".fcpxml")
                     self.generate_fcpxml(
-                        video_path=video_path,
-                        highlights=merged_highlights,
-                        segments=merged_segments,
+                        video_path=job.video_path,
+                        timeline=export_timeline,
                         output_path=fcpxml_path,
-                        frame_rate=fcpxml_frame_rate,
-                        speed=fcpxml_speed,
-                        translate=translate,
-                        source_lang=source_lang,
-                        target_lang=target_lang,
-                        orientation=orientation,
-                        enable_clip=True,
-                        filter_empty_segments=filter_empty_segments,
-                        original_subtitle_color=original_subtitle_color,
-                        translation_subtitle_color=translation_subtitle_color,
+                        frame_rate=job.fcpxml_frame_rate,
+                        speed=job.fcpxml_speed,
+                        translate=job.translate,
+                        source_lang=job.source_lang,
+                        target_lang=job.target_lang,
+                        orientation=job.orientation,
+                        original_subtitle_color=job.original_subtitle_color,
+                        translation_subtitle_color=job.translation_subtitle_color,
                     )
                     results["fcpxml"] = fcpxml_path
 
                 if want_video and subtitle_path:
-                    final_video_path = os.path.join(output_dir, f"{video_name}_final.mp4")
+                    final_video_path = job.output_path("_final.mp4")
                     self.render_video_with_subtitles_complex(
-                        video_path=video_path,
-                        highlights=merged_highlights,
+                        video_path=job.video_path,
+                        timeline=export_timeline,
                         subtitle_path=subtitle_path,
                         output_path=final_video_path,
-                        orientation=orientation,
+                        orientation=job.orientation,
                     )
                     results["final_video"] = final_video_path
 

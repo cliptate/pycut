@@ -6,9 +6,9 @@ import os
 import platform
 import shutil
 import subprocess
-from typing import List, Optional
+from typing import Optional
 
-from pycut.models import Highlight
+from pycut.timeline import TranscriptTimeline
 
 
 def select_video_encoder() -> str:
@@ -44,7 +44,7 @@ def select_ffmpeg_binary() -> str:
 
 def render_video_with_subtitles_complex(
     video_path: str,
-    highlights: List[Highlight],
+    timeline: TranscriptTimeline,
     subtitle_path: str,
     output_path: str,
     orientation: str = "landscape",
@@ -69,26 +69,29 @@ def render_video_with_subtitles_complex(
     print(f"  📐 Input video dimensions: {width}x{height}")
 
     filter_parts = []
+    cues = timeline.cues
+    if not cues:
+        raise ValueError("Cannot render video without timeline cues")
 
     segments = []
-    for i, h in enumerate(highlights):
-        duration = h.end - h.start
+    for i, cue in enumerate(cues):
+        duration = cue.end - cue.start
         segment = (
-            f"[0:v]trim=start={h.start}:duration={duration},setpts=PTS-STARTPTS[v{i}];"
-            f"[0:a]atrim=start={h.start}:duration={duration},asetpts=PTS-STARTPTS[a{i}];"
+            f"[0:v]trim=start={cue.start}:duration={duration},setpts=PTS-STARTPTS[v{i}];"
+            f"[0:a]atrim=start={cue.start}:duration={duration},asetpts=PTS-STARTPTS[a{i}];"
         )
         segments.append(segment)
     filter_parts.append("".join(segments))
 
-    audio_concat = "".join([f"[a{i}]" for i in range(len(highlights))])
-    audio_concat += f"concat=n={len(highlights)}:v=0:a=1[outa];"
+    audio_concat = "".join([f"[a{i}]" for i in range(len(cues))])
+    audio_concat += f"concat=n={len(cues)}:v=0:a=1[outa];"
     filter_parts.append(audio_concat)
 
-    if len(highlights) == 1:
+    if len(cues) == 1:
         filter_parts.append("[v0]copy[concat_v];")
     else:
-        video_concat = "".join([f"[v{i}]" for i in range(len(highlights))])
-        video_concat += f"concat=n={len(highlights)}:v=1:a=0[concat_v];"
+        video_concat = "".join([f"[v{i}]" for i in range(len(cues))])
+        video_concat += f"concat=n={len(cues)}:v=1:a=0[concat_v];"
         filter_parts.append(video_concat)
 
     video_filters = []

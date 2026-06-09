@@ -8,8 +8,19 @@ from pathlib import Path
 
 
 from pycut.clipper import VideoClipper
-from pycut.models import Highlight
+from pycut.timeline import TimelineCue, TranscriptTimeline
 from pycut.utils import Segment
+
+
+def _timeline_from_segments(segments, title="", subtitle=""):
+    return TranscriptTimeline(
+        cues=[
+            TimelineCue(start=seg.start, end=seg.end, text=seg.text, words=list(seg.words or []))
+            for seg in segments
+        ],
+        title=title,
+        subtitle=subtitle,
+    )
 
 
 def test_generate_fcpxml_uses_source_filename_and_timestamped_event(tmp_path):
@@ -23,10 +34,8 @@ def test_generate_fcpxml_uses_source_filename_and_timestamped_event(tmp_path):
 
     clipper.generate_fcpxml(
         video_path=str(video_path),
-        highlights=[],
-        segments=segments,
+        timeline=_timeline_from_segments(segments),
         output_path=str(output_path),
-        enable_clip=False,
     )
 
     content = output_path.read_text(encoding="utf-8")
@@ -88,22 +97,11 @@ def test_generate_fcpxml_full_video_uses_original_segment_text_after_filtering(t
         Segment(start=0.0, end=1.0, text=""),
         Segment(start=1.0, end=3.0, text="hello world"),
     ]
-    highlights = [
-        Highlight(
-            start=1.0,
-            end=3.0,
-            title="hello",
-            subtitle="",
-            content="hello world",
-        )
-    ]
 
     clipper.generate_fcpxml(
         video_path=str(video_path),
-        highlights=highlights,
-        segments=segments,
+        timeline=_timeline_from_segments([segments[1]]),
         output_path=str(output_path),
-        enable_clip=False,
     )
 
     runs = _parse_title_runs(output_path)
@@ -117,22 +115,11 @@ def test_generate_fcpxml_clip_mode_writes_segment_text(tmp_path):
     segments = [
         Segment(start=0.0, end=2.0, text="hello world"),
     ]
-    highlights = [
-        Highlight(
-            start=0.0,
-            end=2.0,
-            title="hello",
-            subtitle="",
-            content="hello world",
-        )
-    ]
 
     clipper.generate_fcpxml(
         video_path=str(video_path),
-        highlights=highlights,
-        segments=segments,
+        timeline=_timeline_from_segments(segments),
         output_path=str(output_path),
-        enable_clip=True,
     )
 
     runs = _parse_title_runs(output_path)
@@ -149,22 +136,11 @@ def test_generate_fcpxml_escapes_xml_special_characters_in_clip_titles(tmp_path)
     segments = [
         Segment(start=0.0, end=2.0, text=source_text),
     ]
-    highlights = [
-        Highlight(
-            start=0.0,
-            end=2.0,
-            title=source_text,
-            subtitle=translation_text,
-            content=source_text,
-        )
-    ]
 
     fcpxml.generate_fcpxml(
         video_path=str(video_path),
-        highlights=highlights,
-        segments=segments,
+        timeline=_timeline_from_segments(segments, title=source_text, subtitle=translation_text),
         output_path=str(output_path),
-        enable_clip=True,
         translate=True,
         translate_fn=lambda texts, _source, _target: [translation_text for _ in texts],
     )
@@ -196,22 +172,11 @@ def test_generate_fcpxml_uses_configured_original_and_translation_colors(tmp_pat
     segments = [
         Segment(start=0.0, end=2.0, text="hello world"),
     ]
-    highlights = [
-        Highlight(
-            start=0.0,
-            end=2.0,
-            title="hello",
-            subtitle="",
-            content="hello world",
-        )
-    ]
 
     fcpxml.generate_fcpxml(
         video_path=str(video_path),
-        highlights=highlights,
-        segments=segments,
+        timeline=_timeline_from_segments(segments, title="hello"),
         output_path=str(output_path),
-        enable_clip=False,
         translate=True,
         translate_fn=lambda texts, _source, _target: [f"tr:{text}" for text in texts],
         original_subtitle_color="#123456",

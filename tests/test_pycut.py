@@ -353,7 +353,7 @@ def test_process_video_unloads_asr_before_postprocessing(monkeypatch, tmp_path):
         margin_right=0.0,
     )
 
-    assert events == ["extract", "transcribe", "unload", "filter"]
+    assert events == ["extract", "transcribe", "unload"]
     assert result == {"transcript": str(tmp_path / "demo_transcript.json")}
 
 
@@ -1201,7 +1201,6 @@ class TestTranscriptJsonFormat:
             "title": "主标题",
             "subtitle": "副标题",
             "segments": [{"start": 0.0, "end": 1.5, "text": "hello", "words": []}],
-            "highlights": []
         }
         with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
             _json.dump(data, f)
@@ -1232,14 +1231,13 @@ class TestTranscriptJsonFormat:
 
     def test_load_segments_null_in_new_format(self):
         from pycut.video_io import _load_segments_from_transcript_json
-        data = {"title": "t", "subtitle": "s", "segments": None, "highlights": None}
+        data = {"title": "t", "subtitle": "s", "segments": None}
         with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
             _json.dump(data, f)
             path = f.name
         try:
             segments, meta = _load_segments_from_transcript_json(path)
             assert segments == []
-            assert meta["highlights"] == []
         finally:
             _os.unlink(path)
 
@@ -1253,7 +1251,6 @@ class TestTranscriptJsonFormat:
             "title": "测试标题",
             "subtitle": "测试副标题",
             "segments": [{"start": s.start, "end": s.end, "text": s.text, "words": s.words or []} for s in segs],
-            "highlights": []
         }
         with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
             _json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1263,7 +1260,6 @@ class TestTranscriptJsonFormat:
             assert loaded_segs[0].text == "test"
             assert meta["title"] == "测试标题"
             assert meta["subtitle"] == "测试副标题"
-            assert meta["highlights"] == []
         finally:
             _os.unlink(path)
 
@@ -1281,6 +1277,46 @@ class TestTranscriptJsonFormat:
             _os.unlink(path)
 
 
+def test_transcript_store_copies_provided_transcript_and_loads_metadata(tmp_path):
+    import json as _json
+    from pycut.transcript_store import TranscriptStore
+
+    provided = tmp_path / "provided.json"
+    provided.write_text(_json.dumps({
+        "title": "stored title",
+        "subtitle": "stored subtitle",
+        "segments": [{"start": 0.0, "end": 1.0, "text": "stored", "words": []}],
+    }), encoding="utf-8")
+
+    store = TranscriptStore(tmp_path / "out", "demo")
+    document = store.load_provided(provided)
+
+    assert document.metadata.title == "stored title"
+    assert document.segments[0].text == "stored"
+    assert store.path.exists()
+    assert _json.loads(store.path.read_text(encoding="utf-8"))["segments"][0]["text"] == "stored"
+
+
+def test_prepare_timeline_filters_margins_and_resolves_overlaps():
+    from pycut.timeline import prepare_timeline
+    from pycut.utils import Segment
+
+    timeline = prepare_timeline(
+        [
+            Segment(start=0.0, end=1.0, text="", words=[]),
+            Segment(start=1.0, end=2.0, text="first", words=[]),
+            Segment(start=2.05, end=3.0, text="second", words=[]),
+        ],
+        filter_empty_segments=True,
+        margin_left=-0.2,
+        margin_right=0.2,
+    )
+
+    assert [cue.text for cue in timeline.cues] == ["first", "second"]
+    assert timeline.cues[0].start == pytest.approx(0.8)
+    assert timeline.cues[0].end <= timeline.cues[1].start
+
+
 
 class TestProcessVideoTranscriptInput:
     def test_extract_audio_not_called_when_transcript_provided(self):
@@ -1292,7 +1328,6 @@ class TestProcessVideoTranscriptInput:
             "title": "测试",
             "subtitle": "副标题",
             "segments": [{"start": 0.0, "end": 2.0, "text": "你好", "words": []}],
-            "highlights": []
         }
         with _tmpfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
             _json2.dump(data, f, ensure_ascii=False)
@@ -1332,13 +1367,12 @@ class TestProcessVideoTranscriptInput:
             "title": "从JSON来的标题",
             "subtitle": "副标题",
             "segments": [{"start": 0.0, "end": 2.0, "text": "测试", "words": []}],
-            "highlights": []
         }
         with _tmpfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as f:
             _json2.dump(data, f, ensure_ascii=False)
             json_path = f.name
 
-        captured_highlights = []
+        captured_titles = []
 
         with _tmpfile.TemporaryDirectory() as output_dir:
             try:
@@ -1350,8 +1384,8 @@ class TestProcessVideoTranscriptInput:
                 clipper.asr_model = None
                 clipper._mlx_aligner = None
 
-                def capture_fcpxml(self_inner, video_path, highlights, segments, output_path, **kwargs):
-                    captured_highlights.extend(highlights)
+                def capture_fcpxml(self_inner, video_path, timeline, output_path, **kwargs):
+                    captured_titles.append(timeline.title)
 
                 with patch.object(VideoClipper, 'generate_fcpxml', capture_fcpxml):
                     clipper.process_video(
@@ -1361,43 +1395,36 @@ class TestProcessVideoTranscriptInput:
                         transcript_json_path=json_path,
                     )
 
-                titles = [h.title for h in captured_highlights]
-                assert "从JSON来的标题" in titles, f"Expected title from JSON, got: {titles}"
+                assert "从JSON来的标题" in captured_titles, f"Expected title from JSON, got: {captured_titles}"
             finally:
                 _os2.unlink(json_path)
 
 
 
-class TestHighlightsJsonOutput:
-    def test_highlight_serialization_roundtrip(self):
-        """Highlights can be serialized to JSON and deserialized back."""
+class TestTimelineJsonOutput:
+    def test_timeline_cue_serialization_roundtrip(self):
+        """Timeline cues can be serialized to JSON and deserialized back."""
         import json as _json
-        from pycut.models import Highlight
+        from pycut.timeline import TimelineCue
 
-        highlights = [
-            Highlight(
-                start=0.0, end=10.0,
-                title="测试标题", subtitle="副标题",
-                content="内容",
-            )
+        cues = [
+            TimelineCue(start=0.0, end=10.0, text="内容", words=[])
         ]
 
         serialized = [
             {
-                "start": h.start,
-                "end": h.end,
-                "title": h.title,
-                "subtitle": h.subtitle,
-                "content": h.content,
+                "start": cue.start,
+                "end": cue.end,
+                "text": cue.text,
+                "words": cue.words,
             }
-            for h in highlights
+            for cue in cues
         ]
 
         result = _json.dumps(serialized, ensure_ascii=False)
         parsed = _json.loads(result)
 
-        assert parsed[0]["title"] == "测试标题"
-        assert parsed[0]["subtitle"] == "副标题"
+        assert parsed[0]["text"] == "内容"
 
 
 # ---------------------------------------------------------------------------
@@ -1453,7 +1480,6 @@ def test_process_video_ignores_deprecated_remote_analysis_flags(monkeypatch, tmp
     transcript_path.write_text(_json.dumps({
         "title": "", "subtitle": "",
         "segments": [{"start": s.start, "end": s.end, "text": s.text, "words": []} for s in fake_segments],
-        "highlights": [],
     }))
 
     vc = VideoClipper.__new__(VideoClipper)
@@ -1669,7 +1695,6 @@ def test_process_video_reuses_transcript_from_per_file_output_dir(monkeypatch, t
         "title": "",
         "subtitle": "",
         "segments": [{"start": 0.0, "end": 1.0, "text": "cached", "words": []}],
-        "highlights": [],
     }), encoding="utf-8")
 
     clipper = VideoClipper.__new__(VideoClipper)
@@ -1712,7 +1737,6 @@ def test_process_video_copies_provided_transcript_into_per_file_output_dir(monke
         "title": "",
         "subtitle": "",
         "segments": [{"start": 0.0, "end": 1.0, "text": "provided", "words": []}],
-        "highlights": [],
     }), encoding="utf-8")
 
     clipper = VideoClipper.__new__(VideoClipper)
@@ -1815,26 +1839,20 @@ def test_cli_help_shows_usage_examples(monkeypatch, capsys):
 
 def test_generate_ass_subtitle_uses_configured_semantic_colors(tmp_path):
     import pycut.subtitle as subtitle_mod
-    from pycut.models import Highlight
+    from pycut.timeline import TimelineCue, TranscriptTimeline
     from pycut.utils import Segment
 
     output_path = tmp_path / "output.ass"
     segments = [
         Segment(start=0.0, end=2.0, text="hello world"),
     ]
-    highlights = [
-        Highlight(
-            start=0.0,
-            end=2.0,
-            title="hello",
-            subtitle="",
-            content="hello world",
-        )
-    ]
+    timeline = TranscriptTimeline(
+        cues=[TimelineCue(start=0.0, end=2.0, text="hello world")],
+        title="hello",
+    )
 
     subtitle_mod.generate_ass_subtitle(
-        highlights=highlights,
-        segments=segments,
+        timeline=timeline,
         output_path=str(output_path),
         translate=True,
         subtitle_position="translated-top",

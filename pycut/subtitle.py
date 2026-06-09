@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable, List, Optional
 
 import pycut.config as config
-from pycut.models import Highlight
+from pycut.timeline import TranscriptTimeline
 from pycut.utils import Segment, hex_color_to_ass
 
 
@@ -23,8 +23,7 @@ def extract_transcription_for_range(
 
 
 def generate_ass_subtitle(
-    highlights: List[Highlight],
-    segments: List[Segment],
+    timeline: TranscriptTimeline,
     output_path: str,
     translate: bool = False,
     source_lang: str = "zh",
@@ -115,85 +114,51 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
     events: List[str] = []
+    cue_texts = [cue.text for cue in timeline.cues]
+    translated_segments: List[str] = []
+    if translate and cue_texts and translate_fn is not None:
+        translated_segments = translate_fn(cue_texts, source_lang, target_lang)
+        if len(translated_segments) != len(cue_texts):
+            translated_segments = cue_texts
+
+    total_duration = sum(cue.duration for cue in timeline.cues)
+    if total_duration > 0 and (timeline.title or timeline.subtitle):
+        timeline_end_fmt = format_time(total_duration)
+        events.append(f"Dialogue: 0,00:00.00,{timeline_end_fmt},Title,,0,0,0,,{timeline.title}")
+        events.append(f"Dialogue: 0,00:00.00,{timeline_end_fmt},Subtitle,,0,0,0,,{timeline.subtitle}")
+
     cumulative_time = 0.0
+    for cue_index, cue in enumerate(timeline.cues):
+        cue_start_time = cumulative_time
+        if cue_index == 0 and first_subtitle_delay > 0:
+            cue_start_time = max(cue_start_time, first_subtitle_delay)
 
-    for h in highlights:
-        duration = h.end - h.start
-        title = h.title
-        subtitle_text = h.subtitle
+        cue_end_time = cumulative_time + cue.duration
+        seg_start = format_time(cue_start_time)
+        seg_end = format_time(cue_end_time)
 
-        highlight_end_fmt = format_time(cumulative_time + duration)
-
-        events.append(f"Dialogue: 0,00:00.00,{highlight_end_fmt},Title,,0,0,0,,{title}")
-        events.append(f"Dialogue: 0,00:00.00,{highlight_end_fmt},Subtitle,,0,0,0,,{subtitle_text}")
-
-        highlight_segments = [
-            seg for seg in segments if seg.end > h.start and seg.start < h.end
-        ]
-
-        processed_segments = []
-        for i, seg in enumerate(highlight_segments):
-            try:
-                original_seg_idx: Optional[int] = segments.index(seg)
-            except ValueError:
-                original_seg_idx = None
-
-            seg_offset_start = max(0, seg.start - h.start)
-            seg_offset_end = min(duration, seg.end - h.start)
-
-            if i + 1 < len(highlight_segments):
-                next_seg = highlight_segments[i + 1]
-                next_offset_start = max(0, next_seg.start - h.start)
-                if next_offset_start > seg_offset_end:
-                    seg_offset_end = next_offset_start
-
-            processed_segments.append(
-                {
-                    "start": cumulative_time + seg_offset_start,
-                    "end": cumulative_time + seg_offset_end,
-                    "text": seg.text,
-                    "segment_id": original_seg_idx,
-                }
-            )
-
-        translated_segments: List[str] = []
-        if translate and processed_segments and translate_fn is not None:
-            source_texts = [item["text"] for item in processed_segments]
-            translated_segments = translate_fn(source_texts, source_lang, target_lang)
-            if len(translated_segments) != len(processed_segments):
-                translated_segments = source_texts
-
-        for seg_idx, seg_data in enumerate(processed_segments):
-            seg_start_time = seg_data["start"]
-            if seg_idx == 0 and first_subtitle_delay > 0:
-                seg_start_time = max(seg_start_time, cumulative_time + first_subtitle_delay)
-
-            seg_start = format_time(seg_start_time)
-            seg_end = format_time(seg_data["end"])
-            original_text = seg_data["text"]
-
-            if translate and translated_segments:
-                translated_text = translated_segments[seg_idx]
-                if subtitle_position == "original-top":
-                    events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{original_text}"
-                    )
-                    events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},TranslationBottom,,0,0,0,,{translated_text}"
-                    )
-                else:
-                    events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},TranslationTop,,0,0,0,,{translated_text}"
-                    )
-                    events.append(
-                        f"Dialogue: 0,{seg_start},{seg_end},OriginalBottom,,0,0,0,,{original_text}"
-                    )
+        if translate and translated_segments:
+            translated_text = translated_segments[cue_index]
+            if subtitle_position == "original-top":
+                events.append(
+                    f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{cue.text}"
+                )
+                events.append(
+                    f"Dialogue: 0,{seg_start},{seg_end},TranslationBottom,,0,0,0,,{translated_text}"
+                )
             else:
                 events.append(
-                    f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{original_text}"
+                    f"Dialogue: 0,{seg_start},{seg_end},TranslationTop,,0,0,0,,{translated_text}"
                 )
+                events.append(
+                    f"Dialogue: 0,{seg_start},{seg_end},OriginalBottom,,0,0,0,,{cue.text}"
+                )
+        else:
+            events.append(
+                f"Dialogue: 0,{seg_start},{seg_end},OriginalTop,,0,0,0,,{cue.text}"
+            )
 
-        cumulative_time += duration
+        cumulative_time = cue_end_time
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(ass_header)

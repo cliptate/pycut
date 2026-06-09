@@ -15,6 +15,9 @@ Prefer the current repository over memory:
 
 - CLI entrypoint: `pycut/cli.py`
 - Main media pipeline: `pycut/clipper.py`
+- Media job options and output paths: `pycut/media_job.py`
+- Transcript persistence: `pycut/transcript_store.py`
+- Transcript timeline preparation: `pycut/timeline.py`
 - TTS implementation: `pycut/tts.py`
 - Runtime/model selection: `pycut/config.py`
 - Supported inputs and output formats: `pycut/video_io.py`
@@ -157,7 +160,7 @@ uv run pycut input.mp4 \
   -o ./output-v2
 ```
 
-`--transcript` only supports a single media input. The current JSON format has `title`, `subtitle`, `segments`, and `highlights`; legacy segment-list JSON is also accepted. The `highlights` field may exist in historical files, but this simplified skill should not generate or depend on it.
+`--transcript` only supports a single media input. The current JSON format has `title`, `subtitle`, and `segments`; legacy segment-list JSON is also accepted. Historical extra fields are ignored by this simplified skill.
 
 ### Text To Speech
 

@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 import pycut.config as config
-from pycut.models import Highlight
+from pycut.timeline import TimelineCue, TranscriptTimeline
 from pycut.utils import (
-    Segment,
     get_audio_duration as _get_audio_duration,
     hex_color_to_fcpxml,
 )
@@ -59,8 +58,8 @@ def build_fcpxml_timemap(
     )
 
 
-def build_fcpxml_title(
-    text: str,
+def _build_fcpxml_title_for_cue(
+    cue: TimelineCue,
     translation: str,
     offset_frames: int,
     duration_frames: int,
@@ -70,7 +69,7 @@ def build_fcpxml_title(
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
 ) -> str:
-    """Return an FCPXML ``<title>`` element string for one subtitle segment."""
+    """Return an FCPXML ``<title>`` element string for one transcript cue."""
 
     def xml_attr(value: str) -> str:
         return escape(value, quote=True)
@@ -83,13 +82,13 @@ def build_fcpxml_title(
     vertical_pos = -33 if orientation == "landscape" else -13
     original_color = hex_color_to_fcpxml(original_subtitle_color)
     translation_color = hex_color_to_fcpxml(translation_subtitle_color)
-    name_attr = (text[:50] if text else f"s{style_id}") or f"s{style_id}"
+    name_attr = (cue.text[:50] if cue.text else f"s{style_id}") or f"s{style_id}"
     lines = [
         f'              <title ref="r3" name="{xml_attr(name_attr)}" lane="1"'
         f' offset="{offset_frames}/{fps_int}s"'
         f' duration="{duration_frames}/{fps_int}s">',
         "                <text>",
-        f'                  <text-style ref="ts{style_id}">{xml_text(text)}</text-style>',
+        f'                  <text-style ref="ts{style_id}">{xml_text(cue.text)}</text-style>',
     ]
     if translation:
         lines += [
@@ -123,8 +122,7 @@ def build_fcpxml_title(
 
 def generate_fcpxml(
     video_path: str,
-    highlights: List[Highlight],
-    segments: List[Segment],
+    timeline: TranscriptTimeline,
     output_path: str,
     frame_rate: float = 25.0,
     speed: float = 1.0,
@@ -132,19 +130,13 @@ def generate_fcpxml(
     source_lang: str = "zh",
     target_lang: str = "en",
     orientation: str = "landscape",
-    enable_clip: bool = True,
-    filter_empty_segments: bool = True,
     translate_fn: Optional[Callable[[List[str], str, str], List[str]]] = None,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
 ) -> str:
     """Generate an FCPXML file for Final Cut Pro or DaVinci Resolve.
 
-    Clip mode (enable_clip=True): one asset-clip per subtitle segment within
-    the given highlights, placed sequentially on the timeline.
-
-    Full-video mode (enable_clip=False): one asset-clip spanning the entire
-    video with all subtitle segments attached as title children.
+    The FCPXML timeline is built from prepared transcript cues.
     """
     print(
         f"📋 Generating FCPXML: {output_path}, orientation: {orientation}, "
@@ -171,7 +163,8 @@ def generate_fcpxml(
         return f"{n}/{fps_int}s"
 
     width, height = (1920, 1080) if orientation == "landscape" else (1080, 1920)
-    video_duration = segments[-1].end if segments else 0.0
+    active = [cue for cue in timeline.cues if str(cue.text or "").strip()]
+    video_duration = timeline.end if timeline.cues else 0.0
 
     video_url = Path(video_path).resolve().as_uri()
     video_name = Path(video_path).stem
@@ -180,20 +173,6 @@ def generate_fcpxml(
     video_src_dur_f = s2f(video_duration)
     video_dur_f = s2f_timeline(video_duration)
 
-    if enable_clip and highlights:
-        active_raw: List[Segment] = []
-        for h in highlights:
-            for seg in segments:
-                if seg.end > h.start and seg.start < h.end:
-                    active_raw.append(seg)
-    else:
-        active_raw = list(segments)
-
-    if filter_empty_segments:
-        active = [seg for seg in active_raw if str(getattr(seg, "text", "") or "").strip()]
-    else:
-        active = list(active_raw)
-
     if translate and active and translate_fn is not None:
         print("🌍 Translating segments for FCPXML...")
         raw = translate_fn([s.text for s in active], source_lang, target_lang)
@@ -201,23 +180,13 @@ def generate_fcpxml(
     else:
         trans_list = [""] * len(active)
 
-    if enable_clip and highlights:
-        total_f = 0
-        last_end_f = 0
-        for seg in active:
-            start_f = s2f_start(seg.start)
-            end_f = s2f_end(seg.end)
-            if last_end_f > 0 and start_f < last_end_f:
-                start_f = last_end_f
-            dur_f_src = end_f - start_f
-            if dur_f_src <= 0:
-                continue
-            if start_f > last_end_f:
-                gap_src = start_f - last_end_f
-                total_f += int(math.ceil(gap_src / timeline_speed))
-            total_f += max(1, int(math.ceil(dur_f_src / timeline_speed)))
-            last_end_f = end_f
-    else:
+    total_f = 0
+    for cue in active:
+        dur_f_src = s2f_end(cue.end) - s2f_start(cue.start)
+        if dur_f_src <= 0:
+            continue
+        total_f += max(1, int(math.ceil(dur_f_src / timeline_speed)))
+    if total_f <= 0:
         total_f = video_dur_f
 
     buf: List[str] = [
@@ -245,92 +214,39 @@ def generate_fcpxml(
     ]
 
     style_id = 1
-    if enable_clip and highlights:
-        timeline_off = 0
-        last_end_f = 0
-        for i, seg in enumerate(active):
-            start_f = s2f_start(seg.start)
-            end_f = s2f_end(seg.end)
-            if last_end_f > 0 and start_f < last_end_f:
-                start_f = last_end_f
-            dur_f_src = end_f - start_f
-            if dur_f_src <= 0:
-                continue
-            dur_f = max(1, int(math.ceil(dur_f_src / timeline_speed)))
-            if (not filter_empty_segments) and start_f > last_end_f:
-                gap_src = start_f - last_end_f
-                gap_f = int(math.ceil(gap_src / timeline_speed))
-                if gap_f > 0:
-                    if timeline_speed != 1.0:
-                        buf += [
-                            f'            <asset-clip ref="r2" offset="{ft(timeline_off)}"'
-                            f' duration="{ft(gap_f)}" start="{ft(last_end_f)}"'
-                            f' name="gap-{i}" tcFormat="NDF">',
-                            build_fcpxml_timemap(last_end_f, gap_f, gap_src, fps_int),
-                            "            </asset-clip>",
-                        ]
-                    else:
-                        buf.append(
-                            f'            <asset-clip ref="r2" offset="{ft(timeline_off)}"'
-                            f' duration="{ft(gap_f)}" start="{ft(last_end_f)}"'
-                            f' name="gap-{i}" tcFormat="NDF"/>'
-                        )
-                    timeline_off += gap_f
-            translation = trans_list[i] if i < len(trans_list) else ""
-            clip_lines = [
-                f'            <asset-clip ref="r2" offset="{ft(timeline_off)}"'
-                f' duration="{ft(dur_f)}" start="{ft(start_f)}"'
-                f' name="{escape((seg.text[:40] or str(i)), quote=True)}" tcFormat="NDF">',
-            ]
-            if timeline_speed != 1.0:
-                clip_lines.append(build_fcpxml_timemap(start_f, dur_f, dur_f_src, fps_int))
-            clip_lines += [
-                build_fcpxml_title(
-                    seg.text,
-                    translation,
-                    start_f,
-                    dur_f,
-                    fps_int,
-                    style_id,
-                    orientation,
-                    original_subtitle_color=original_subtitle_color,
-                    translation_subtitle_color=translation_subtitle_color,
-                ),
-                "            </asset-clip>",
-            ]
-            buf += clip_lines
-            style_id += 1
-            timeline_off += dur_f
-            last_end_f = end_f
-    else:
-        buf.append(
-            f'            <asset-clip ref="r2" offset="0/{fps_int}s"'
-            f' duration="{ft(video_dur_f)}" start="0/{fps_int}s"'
-            f' name="{escape(video_name, quote=True)}" tcFormat="NDF">'
-        )
+    timeline_off = 0
+    for i, cue in enumerate(active):
+        start_f = s2f_start(cue.start)
+        end_f = s2f_end(cue.end)
+        dur_f_src = end_f - start_f
+        if dur_f_src <= 0:
+            continue
+        dur_f = max(1, int(math.ceil(dur_f_src / timeline_speed)))
+        translation = trans_list[i] if i < len(trans_list) else ""
+        clip_lines = [
+            f'            <asset-clip ref="r2" offset="{ft(timeline_off)}"'
+            f' duration="{ft(dur_f)}" start="{ft(start_f)}"'
+            f' name="{escape((cue.text[:40] or str(i)), quote=True)}" tcFormat="NDF">',
+        ]
         if timeline_speed != 1.0:
-            buf.append(build_fcpxml_timemap(0, video_dur_f, video_src_dur_f, fps_int))
-        for i, seg in enumerate(active):
-            start_f = s2f_timeline(seg.start)
-            dur_f = s2f_timeline(seg.end - seg.start)
-            if dur_f <= 0:
-                continue
-            translation = trans_list[i] if i < len(trans_list) else ""
-            buf.append(
-                build_fcpxml_title(
-                    seg.text,
-                    translation,
-                    start_f,
-                    dur_f,
-                    fps_int,
-                    style_id,
-                    orientation,
-                    original_subtitle_color=original_subtitle_color,
-                    translation_subtitle_color=translation_subtitle_color,
-                )
-            )
-            style_id += 1
-        buf.append("            </asset-clip>")
+            clip_lines.append(build_fcpxml_timemap(start_f, dur_f, dur_f_src, fps_int))
+        clip_lines += [
+            _build_fcpxml_title_for_cue(
+                cue,
+                translation,
+                start_f,
+                dur_f,
+                fps_int,
+                style_id,
+                orientation,
+                original_subtitle_color=original_subtitle_color,
+                translation_subtitle_color=translation_subtitle_color,
+            ),
+            "            </asset-clip>",
+        ]
+        buf += clip_lines
+        style_id += 1
+        timeline_off += dur_f
 
     buf += [
         "          </spine>",

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import fnmatch
 import glob as _glob
-import json
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
+from pycut.transcript_store import load_segments_with_meta
 from pycut.utils import Segment
 
 SUPPORTED_OUTPUT_FORMATS = ("ass", "srt", "fcpxml", "video", "txt", "json")
@@ -93,40 +93,5 @@ def _expand_video_inputs(raw_inputs: Iterable[str]) -> List[str]:
 
 
 def _load_segments_from_transcript_json(transcript_path: str) -> Tuple[List[Segment], dict]:
-    """Load segments and metadata from transcript JSON.
-
-    Returns:
-        Tuple of (segments, metadata) where metadata contains 'title', 'subtitle', 'highlights'.
-        Handles both old list format and new object format.
-    """
-    with open(transcript_path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-
-    if isinstance(payload, list):
-        raw_segments = payload
-        meta: dict = {"title": "", "subtitle": "", "highlights": []}
-    elif isinstance(payload, dict):
-        raw_segments = payload.get("segments", []) or []
-        meta = {
-            "title": payload.get("title", ""),
-            "subtitle": payload.get("subtitle", ""),
-            "highlights": payload.get("highlights", []) or [],
-        }
-    else:
-        print(f"⚠️  Unexpected transcript JSON root type {type(payload).__name__}, treating as empty")
-        raw_segments = []
-        meta = {"title": "", "subtitle": "", "highlights": []}
-
-    segments: List[Segment] = []
-    for item in raw_segments:
-        if not isinstance(item, dict):
-            continue
-        try:
-            start = float(item.get("start", 0.0))
-            end = float(item.get("end", start))
-            text = str(item.get("text", ""))
-            words = list(item.get("words", []) or [])
-            segments.append(Segment(start=start, end=end, text=text, words=words))
-        except (TypeError, ValueError):
-            continue  # Skip malformed segments
-    return segments, meta
+    """Load segments and metadata from transcript JSON."""
+    return load_segments_with_meta(transcript_path)
