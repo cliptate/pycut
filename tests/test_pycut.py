@@ -1902,7 +1902,7 @@ def test_cli_help_mentions_dynamic_defaults(monkeypatch):
 
     assert "video.parent / video.stem" in source
     assert cli_module._resolve_default_asr_model("en") == config_module.DEFAULT_EN_ASR_MODEL
-    assert "Qwen3-ASR-1.7B-bf16" in config_source
+    assert "Qwen3-ASR-1.7B-8bit" in config_source
     assert "whisper-large-v3-turbo" in config_source
 
 

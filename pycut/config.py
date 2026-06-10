@@ -9,9 +9,9 @@ from pathlib import Path
 APPLE_SILICON_MACHINES = frozenset({"arm64", "aarch64"})
 SUPPORTED_SYSTEMS = frozenset({"darwin", "linux", "windows", "win32"})
 
-# DEFAULT_ASR_MODEL for CN: "mlx-community/Qwen3-ASR-1.7B-bf16"
+# DEFAULT_ASR_MODEL for CN: "mlx-community/Qwen3-ASR-1.7B-8bit"
 DEFAULT_MLX_EN_ASR_MODEL = "mlx-community/parakeet-tdt-0.6b-v3"
-DEFAULT_MLX_CHINESE_ASR_MODEL = "mlx-community/Qwen3-ASR-1.7B-bf16"
+DEFAULT_MLX_CHINESE_ASR_MODEL = "mlx-community/Qwen3-ASR-1.7B-8bit"
 DEFAULT_MLX_FALLBACK_ASR_MODEL = "mlx-community/whisper-large-v3-turbo"
 DEFAULT_MLX_ALIGNER_MODEL = "mlx-community/Qwen3-ForcedAligner-0.6B-8bit"
 DEFAULT_QWEN_ASR_MODEL = "Qwen/Qwen3-ASR-1.7B"
