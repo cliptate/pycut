@@ -25,6 +25,9 @@ dependencies = [
 [project.scripts]
 pycut = "pycut.cli:console_main"
 
+[tool.setuptools.packages.find]
+include = ["pycut*"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 markers = [
