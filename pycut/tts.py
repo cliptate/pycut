@@ -21,6 +21,12 @@ def _write_wav(output_path: str, audio, sample_rate: int) -> str:
     return str(output)
 
 
+def _load_mlx_generate_audio():
+    from mlx_audio.tts.generate import generate_audio
+
+    return generate_audio
+
+
 class MLXTTSHelper:
     def __init__(self, *, model_path: str = config.DEFAULT_MLX_TTS_MODEL):
         self.model_path = model_path
@@ -54,6 +60,7 @@ class MLXTTSHelper:
         prompt_audio: Optional[str] = None,
         prompt_text: Optional[str] = None,
         normalize: bool = False,
+        join_audio: bool = True,
         **_: object,
     ) -> str:
         self.load_model()
@@ -70,6 +77,73 @@ class MLXTTSHelper:
         if prompt_text:
             kwargs["ref_text"] = prompt_text
 
+        if join_audio:
+            joined_output = self._try_mlx_join_audio(
+                text=text,
+                output_path=output_path,
+                kwargs=kwargs,
+                speed=speed,
+                lang_code=lang_code,
+                ref_audio=ref_audio,
+                ref_text=prompt_text,
+            )
+            if joined_output is not None:
+                return joined_output
+
+        return self._synthesize_chunks_to_wav(text=text, output_path=output_path, kwargs=kwargs)
+
+    def _try_mlx_join_audio(
+        self,
+        *,
+        text: str,
+        output_path: str,
+        kwargs: dict[str, object],
+        speed: Optional[float],
+        lang_code: Optional[str],
+        ref_audio: Optional[str],
+        ref_text: Optional[str],
+    ) -> str | None:
+        output = Path(output_path)
+        if not output.suffix:
+            return None
+        if ref_audio and not ref_text:
+            return None
+
+        try:
+            generate_audio = _load_mlx_generate_audio()
+        except (ImportError, OSError):
+            return None
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            output.unlink()
+
+        generate_kwargs = {
+            **kwargs,
+            "speed": speed if speed is not None else 1.0,
+            "lang_code": lang_code or "en",
+        }
+        try:
+            generate_audio(
+                text=text,
+                model=self.model,
+                output_path=str(output.parent),
+                file_prefix=output.stem,
+                audio_format=output.suffix.lstrip("."),
+                join_audio=True,
+                play=False,
+                verbose=False,
+                **generate_kwargs,
+            )
+        except TypeError:
+            return None
+
+        if output.exists():
+            print(f"💾 TTS audio saved to {output}")
+            return str(output)
+        return None
+
+    def _synthesize_chunks_to_wav(self, *, text: str, output_path: str, kwargs: dict[str, object]) -> str:
         chunks = []
         sample_rate = None
         for result in self.model.generate(text, **kwargs):
@@ -141,6 +215,7 @@ class VoxCPMTTSHelper:
         cfg_value: float = 2.0,
         inference_timesteps: int = 10,
         normalize: bool = False,
+        join_audio: bool = True,
         **_: object,
     ) -> str:
         self.load_model()
@@ -181,6 +256,7 @@ def synthesize_text_to_wav(
     cfg_value: float = 2.0,
     inference_timesteps: int = 10,
     normalize: bool = False,
+    join_audio: bool = True,
 ) -> str:
     helper = create_tts_helper(model_path=model_path, device=device)
     return helper.synthesize(
@@ -195,4 +271,5 @@ def synthesize_text_to_wav(
         cfg_value=cfg_value,
         inference_timesteps=inference_timesteps,
         normalize=normalize,
+        join_audio=join_audio,
     )

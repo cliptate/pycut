@@ -141,6 +141,9 @@ pycut tts --text-file script.txt --output voice.wav
 pycut tts --text "使用克隆声音生成这句话" --reference-audio reference.wav --prompt-text "参考音频对应文本" --output voice.wav
 ```
 
+在 MLX Audio 后端，多段生成默认会合并到指定的 WAV 文件。可使用
+`--no-join-audio` 回退到 pycut 本地 chunk 写入逻辑，便于兼容性检查。
+
 ## 处理流程
 
 ```text

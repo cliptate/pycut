@@ -190,6 +190,9 @@ pycut tts --text-file script.txt --output voice.wav
 pycut tts --text "Hello in the cloned voice" --reference-audio reference.wav --prompt-text "Reference transcript" --output voice.wav
 ```
 
+On MLX Audio, multi-segment generation is joined into the requested WAV by default. Use
+`--no-join-audio` to fall back to pycut's local chunk writer for compatibility checks.
+
 Default TTS models:
 
 | System | Backend | Default model |

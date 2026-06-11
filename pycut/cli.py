@@ -155,6 +155,12 @@ def _build_tts_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cfg", type=float, default=2.0, help="VoxCPM CFG value (default: 2.0)")
     parser.add_argument("--steps", type=int, default=10, help="VoxCPM inference steps (default: 10)")
     parser.add_argument("--normalize", action="store_true", help="Enable backend text normalization")
+    parser.add_argument(
+        "--join-audio",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Join MLX multi-segment output into one WAV (default: enabled)",
+    )
     return parser
 
 
@@ -184,6 +190,7 @@ def _run_tts(argv: list[str]):
         cfg_value=args.cfg,
         inference_timesteps=args.steps,
         normalize=args.normalize,
+        join_audio=args.join_audio,
     )
     return {"tts": output_path}
 
