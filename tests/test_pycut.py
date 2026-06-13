@@ -816,12 +816,27 @@ def test_tts_cli_passes_mlx_generation_controls(monkeypatch, tmp_path):
         "\\n",
         "--max-tokens",
         "4096",
+        "--temperature",
+        "0.2",
+        "--top_p",
+        "0.8",
+        "--top_k",
+        "20",
+        "--repetition_penalty",
+        "1.3",
+        "--stt_model",
+        "custom-stt",
         "--verbose",
     ])
 
     assert result == {"tts": str(output)}
     assert seen["split_pattern"] == "\n"
     assert seen["max_tokens"] == 4096
+    assert seen["temperature"] == 0.2
+    assert seen["top_p"] == 0.8
+    assert seen["top_k"] == 20
+    assert seen["repetition_penalty"] == 1.3
+    assert seen["stt_model"] == "custom-stt"
     assert seen["verbose"] is True
 
     seen.clear()
@@ -841,6 +856,32 @@ def test_tts_cli_passes_mlx_generation_controls(monkeypatch, tmp_path):
     assert result == {"tts": str(output)}
     assert seen["split_pattern"] == "\n"
     assert seen["max_tokens"] == 4096
+
+
+def test_tts_cli_uses_mlx_audio_sampler_defaults(monkeypatch, tmp_path):
+    """pycut tts should match mlx_audio CLI sampling defaults for segment consistency."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(config, "resolve_default_mlx_tts_model", lambda: config.DEFAULT_MLX_TTS_MODEL)
+
+    seen = {}
+
+    def fake_synthesize_text_to_wav(**kwargs):
+        seen.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
+
+    output = tmp_path / "voice.wav"
+
+    assert cli_module.main(["tts", "--text", "hello", "--output", str(output)]) == {"tts": str(output)}
+    assert seen["temperature"] == 0.7
+    assert seen["top_p"] == 0.9
+    assert seen["top_k"] == 50
+    assert seen["repetition_penalty"] == 1.1
 
 
 def test_tts_console_main_returns_zero_on_success(monkeypatch, tmp_path, capsys):
@@ -1123,6 +1164,57 @@ def test_mlx_tts_helper_passes_voice_clone_options(monkeypatch):
     ) == "out.wav"
     assert seen["text"] == "target"
     assert seen["ref_audio"] == "reference.wav"
+    assert seen["ref_text"] == "reference transcript"
+
+
+def test_mlx_tts_helper_transcribes_reference_audio_when_prompt_text_is_missing(monkeypatch):
+    """MLX TTS should mirror mlx_audio's ref_audio auto transcription for stable voice cloning."""
+    import numpy as np
+    import pycut.tts as tts
+
+    seen = {}
+
+    class FakeResult:
+        audio = np.asarray([0.1], dtype=np.float32)
+        sample_rate = 24000
+
+    class FakeModel:
+        sample_rate = 24000
+
+        def generate(self, text, voice, ref_audio=None, ref_text=None, **kwargs):
+            seen["text"] = text
+            seen["voice"] = voice
+            seen["ref_audio"] = ref_audio
+            seen["ref_text"] = ref_text
+            yield FakeResult()
+
+    def fake_load_reference_audio(ref_audio, sample_rate):
+        seen["loaded_ref_audio"] = ref_audio
+        seen["loaded_sample_rate"] = sample_rate
+        return "loaded-reference-audio"
+
+    def fake_transcribe_reference_audio(ref_audio, stt_model_path):
+        seen["stt_ref_audio"] = ref_audio
+        seen["stt_model_path"] = stt_model_path
+        return "reference transcript"
+
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_load_mlx_reference_audio", fake_load_reference_audio, raising=False)
+    monkeypatch.setattr(tts, "_transcribe_mlx_reference_audio", fake_transcribe_reference_audio, raising=False)
+    monkeypatch.setattr(tts, "_write_wav", lambda output_path, audio, sample_rate: output_path)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    assert helper.synthesize(
+        text="hello",
+        output_path="out.wav",
+        reference_audio="reference.wav",
+        join_audio=False,
+    ) == "out.wav"
+    assert seen["loaded_ref_audio"] == "reference.wav"
+    assert seen["loaded_sample_rate"] == 24000
+    assert seen["stt_ref_audio"] == "loaded-reference-audio"
+    assert seen["ref_audio"] == "loaded-reference-audio"
     assert seen["ref_text"] == "reference transcript"
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict
 
 import pycut.config as config
-from pycut.tts import synthesize_text_to_wav
+from pycut.tts import DEFAULT_MLX_TTS_STT_MODEL, synthesize_text_to_wav
 from pycut.utils import normalize_hex_color
 from pycut.video_io import (
     _parse_output_formats, _expand_video_inputs,
@@ -171,11 +171,27 @@ def _build_tts_parser() -> argparse.ArgumentParser:
         default=None,
         help="MLX max generation tokens per segment",
     )
+    parser.add_argument("--temperature", type=float, default=0.7, help="MLX sampling temperature (default: 0.7)")
+    parser.add_argument("--top-p", "--top_p", type=float, default=0.9, help="MLX top-p sampling (default: 0.9)")
+    parser.add_argument("--top-k", "--top_k", type=int, default=50, help="MLX top-k sampling (default: 50)")
+    parser.add_argument(
+        "--repetition-penalty",
+        "--repetition_penalty",
+        type=float,
+        default=1.1,
+        help="MLX repetition penalty (default: 1.1)",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable backend generation progress output")
     parser.add_argument("--device", default=None, help="VoxCPM device override, e.g. cuda, cpu, mps")
     parser.add_argument("--reference-audio", default=None, help="Reference audio for voice cloning")
     parser.add_argument("--prompt-audio", default=None, help="Prompt/reference audio path")
     parser.add_argument("--prompt-text", default=None, help="Text corresponding to the prompt/reference audio")
+    parser.add_argument(
+        "--stt-model",
+        "--stt_model",
+        default=DEFAULT_MLX_TTS_STT_MODEL,
+        help="MLX STT model for transcribing reference audio when prompt text is omitted",
+    )
     parser.add_argument("--cfg", type=float, default=2.0, help="VoxCPM CFG value (default: 2.0)")
     parser.add_argument("--steps", type=int, default=10, help="VoxCPM inference steps (default: 10)")
     parser.add_argument("--normalize", action="store_true", help="Enable backend text normalization")
@@ -216,11 +232,16 @@ def _run_tts(argv: list[str]):
         speed=args.speed,
         split_pattern=_decode_tts_split_pattern(args.split_pattern),
         max_tokens=args.max_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        repetition_penalty=args.repetition_penalty,
         verbose=args.verbose,
         device=args.device,
         reference_audio=args.reference_audio,
         prompt_audio=args.prompt_audio,
         prompt_text=args.prompt_text,
+        stt_model=args.stt_model,
         cfg_value=args.cfg,
         inference_timesteps=args.steps,
         normalize=args.normalize,

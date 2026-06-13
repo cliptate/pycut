@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Optional
 
 import pycut.config as config
+
+DEFAULT_MLX_TTS_STT_MODEL = "mlx-community/whisper-large-v3-turbo-asr-fp16"
 
 
 def _write_wav(output_path: str, audio, sample_rate: int) -> str:
@@ -25,6 +28,36 @@ def _load_mlx_write_joined_audio():
     from mlx_audio.tts.generate import write_joined_audio
 
     return write_joined_audio
+
+
+def _load_mlx_reference_audio(ref_audio: str, sample_rate: int):
+    from mlx_audio.utils import load_audio
+
+    return load_audio(ref_audio, sample_rate=sample_rate)
+
+
+def _transcribe_mlx_reference_audio(ref_audio, stt_model_path: str) -> str:
+    from mlx_audio.stt import load as load_stt_model
+
+    stt_model = load_stt_model(config.resolve_model_path(stt_model_path))
+    try:
+        result = stt_model.generate(ref_audio)
+        return str(getattr(result, "text", result)).strip()
+    finally:
+        del stt_model
+        try:
+            import mlx.core as mx
+        except ImportError:
+            pass
+        else:
+            mx.clear_cache()
+
+
+def _model_accepts_ref_text(model: object) -> bool:
+    try:
+        return "ref_text" in inspect.signature(model.generate).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 def _read_attr_or_mapping_value(source: object, name: str) -> object:
@@ -76,10 +109,15 @@ class MLXTTSHelper:
         speed: Optional[float] = None,
         split_pattern: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        temperature: Optional[float] = 0.7,
+        top_p: Optional[float] = 0.9,
+        top_k: Optional[int] = 50,
+        repetition_penalty: Optional[float] = 1.1,
         verbose: bool = False,
         reference_audio: Optional[str] = None,
         prompt_audio: Optional[str] = None,
         prompt_text: Optional[str] = None,
+        stt_model: Optional[str] = DEFAULT_MLX_TTS_STT_MODEL,
         normalize: bool = False,
         join_audio: bool = True,
         **_: object,
@@ -94,6 +132,14 @@ class MLXTTSHelper:
             kwargs["split_pattern"] = split_pattern
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if top_p is not None:
+            kwargs["top_p"] = top_p
+        if top_k is not None:
+            kwargs["top_k"] = top_k
+        if repetition_penalty is not None:
+            kwargs["repetition_penalty"] = repetition_penalty
         if verbose:
             kwargs["verbose"] = verbose
         if normalize:
@@ -101,8 +147,17 @@ class MLXTTSHelper:
         ref_audio = reference_audio or prompt_audio
         if ref_audio:
             kwargs["ref_audio"] = ref_audio
-        if prompt_text:
-            kwargs["ref_text"] = prompt_text
+            if prompt_text:
+                kwargs["ref_text"] = prompt_text
+            elif stt_model and _model_accepts_ref_text(self.model):
+                sample_rate = _resolve_sample_rate(self.model) or 24000
+                loaded_ref_audio = _load_mlx_reference_audio(ref_audio, sample_rate)
+                ref_text = _transcribe_mlx_reference_audio(loaded_ref_audio, stt_model)
+                if not ref_text:
+                    raise RuntimeError("MLX TTS reference audio transcription is empty")
+                kwargs["ref_audio"] = loaded_ref_audio
+                kwargs["ref_text"] = ref_text
+                print("Transcribed MLX TTS reference audio for voice consistency")
 
         if join_audio:
             joined_output = self._try_mlx_join_audio(
@@ -238,8 +293,13 @@ class VoxCPMTTSHelper:
         reference_audio: Optional[str] = None,
         prompt_audio: Optional[str] = None,
         prompt_text: Optional[str] = None,
+        stt_model: Optional[str] = DEFAULT_MLX_TTS_STT_MODEL,
         split_pattern: Optional[str] = None,
         max_tokens: Optional[int] = None,
+        temperature: Optional[float] = 0.7,
+        top_p: Optional[float] = 0.9,
+        top_k: Optional[int] = 50,
+        repetition_penalty: Optional[float] = 1.1,
         verbose: bool = False,
         cfg_value: float = 2.0,
         inference_timesteps: int = 10,
@@ -280,11 +340,16 @@ def synthesize_text_to_wav(
     speed: Optional[float] = None,
     split_pattern: Optional[str] = None,
     max_tokens: Optional[int] = None,
+    temperature: Optional[float] = 0.7,
+    top_p: Optional[float] = 0.9,
+    top_k: Optional[int] = 50,
+    repetition_penalty: Optional[float] = 1.1,
     verbose: bool = False,
     device: Optional[str] = None,
     reference_audio: Optional[str] = None,
     prompt_audio: Optional[str] = None,
     prompt_text: Optional[str] = None,
+    stt_model: Optional[str] = DEFAULT_MLX_TTS_STT_MODEL,
     cfg_value: float = 2.0,
     inference_timesteps: int = 10,
     normalize: bool = False,
@@ -299,10 +364,15 @@ def synthesize_text_to_wav(
         speed=speed,
         split_pattern=split_pattern,
         max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        repetition_penalty=repetition_penalty,
         verbose=verbose,
         reference_audio=reference_audio,
         prompt_audio=prompt_audio,
         prompt_text=prompt_text,
+        stt_model=stt_model,
         cfg_value=cfg_value,
         inference_timesteps=inference_timesteps,
         normalize=normalize,
