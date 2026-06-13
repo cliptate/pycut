@@ -157,6 +157,7 @@ def _build_tts_parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalize", action="store_true", help="Enable backend text normalization")
     parser.add_argument(
         "--join-audio",
+        "--join_audio",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Join MLX multi-segment output into one WAV (default: enabled)",

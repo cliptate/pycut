@@ -27,6 +27,44 @@ def _load_mlx_generate_audio():
     return generate_audio
 
 
+def _read_attr_or_mapping_value(source: object, name: str) -> object:
+    if isinstance(source, dict):
+        return source.get(name)
+    return getattr(source, name, None)
+
+
+def _resolve_sample_rate(source: object) -> int | None:
+    for candidate in (
+        _read_attr_or_mapping_value(source, "sample_rate"),
+        _read_attr_or_mapping_value(getattr(source, "tts_model", None), "sample_rate"),
+        _read_attr_or_mapping_value(getattr(source, "config", None), "sample_rate"),
+        _read_attr_or_mapping_value(getattr(source, "config", None), "output_sample_rate"),
+    ):
+        if candidate:
+            return int(candidate)
+    return None
+
+
+class _MLXModelWithSampleRate:
+    def __init__(self, model: object, sample_rate: int):
+        self._model = model
+        self.sample_rate = sample_rate
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._model, name)
+
+
+def _with_sample_rate(model: object) -> object:
+    if getattr(model, "sample_rate", None):
+        return model
+
+    sample_rate = _resolve_sample_rate(model)
+    if sample_rate is None:
+        return model
+
+    return _MLXModelWithSampleRate(model, sample_rate)
+
+
 class MLXTTSHelper:
     def __init__(self, *, model_path: str = config.DEFAULT_MLX_TTS_MODEL):
         self.model_path = model_path
@@ -106,8 +144,6 @@ class MLXTTSHelper:
         output = Path(output_path)
         if not output.suffix:
             return None
-        if ref_audio and not ref_text:
-            return None
 
         try:
             generate_audio = _load_mlx_generate_audio()
@@ -126,7 +162,7 @@ class MLXTTSHelper:
         try:
             generate_audio(
                 text=text,
-                model=self.model,
+                model=_with_sample_rate(self.model),
                 output_path=str(output.parent),
                 file_prefix=output.stem,
                 audio_format=output.suffix.lstrip("."),
@@ -141,7 +177,10 @@ class MLXTTSHelper:
         if output.exists():
             print(f"💾 TTS audio saved to {output}")
             return str(output)
-        return None
+        raise RuntimeError(
+            f"MLX Audio join_audio did not create {output}. "
+            "Run again with --no-join-audio to use pycut's compatibility chunk writer."
+        )
 
     def _synthesize_chunks_to_wav(self, *, text: str, output_path: str, kwargs: dict[str, object]) -> str:
         chunks = []

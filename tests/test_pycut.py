@@ -753,19 +753,20 @@ def test_tts_cli_can_disable_join_audio(monkeypatch, tmp_path):
     monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
     monkeypatch.setattr(config, "resolve_default_mlx_tts_model", lambda: config.DEFAULT_MLX_TTS_MODEL)
 
-    seen = {}
+    seen_by_option = {}
 
     def fake_synthesize_text_to_wav(**kwargs):
-        seen.update(kwargs)
+        seen_by_option[kwargs["output_path"]] = dict(kwargs)
         return kwargs["output_path"]
 
     monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
 
-    output = tmp_path / "voice.wav"
-    result = cli_module.main(["tts", "--text", "hello", "--output", str(output), "--no-join-audio"])
+    for option in ("--no-join-audio", "--no-join_audio"):
+        output = tmp_path / f"{option.removeprefix('--no-')}.wav"
+        result = cli_module.main(["tts", "--text", "hello", "--output", str(output), option])
 
-    assert result == {"tts": str(output)}
-    assert seen["join_audio"] is False
+        assert result == {"tts": str(output)}
+        assert seen_by_option[str(output)]["join_audio"] is False
 
 
 def test_tts_console_main_returns_zero_on_success(monkeypatch, tmp_path, capsys):
@@ -912,6 +913,50 @@ def test_mlx_tts_helper_uses_mlx_audio_join_audio(monkeypatch, tmp_path):
     assert seen["audio_format"] == "wav"
     assert seen["join_audio"] is True
     assert seen["voice"] == "Chelsie"
+
+
+def test_mlx_tts_helper_adds_sample_rate_for_mlx_audio_join_audio(monkeypatch, tmp_path):
+    """MLX joined output should work when the loaded model stores sample rate in config."""
+    import pycut.tts as tts
+
+    output = tmp_path / "joined.wav"
+    seen = {}
+
+    class FakeModel:
+        config = types.SimpleNamespace(sample_rate=22050)
+
+    def fake_generate_audio(**kwargs):
+        seen["sample_rate"] = kwargs["model"].sample_rate
+        output.write_bytes(b"RIFF")
+
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_load_mlx_generate_audio", lambda: fake_generate_audio)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    assert helper.synthesize(text="hello", output_path=str(output)) == str(output)
+    assert seen["sample_rate"] == 22050
+
+
+def test_mlx_tts_helper_reports_mlx_join_audio_failures(monkeypatch, tmp_path):
+    """MLX joined output failures should not silently fall back to pycut chunk writing."""
+    import pycut.tts as tts
+
+    output = tmp_path / "joined.wav"
+
+    class FakeModel:
+        sample_rate = 22050
+
+        def generate(self, text, **kwargs):
+            raise AssertionError("fallback chunk writer should not run")
+
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_load_mlx_generate_audio", lambda: lambda **kwargs: None)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    with pytest.raises(RuntimeError, match="join_audio did not create"):
+        helper.synthesize(text="hello", output_path=str(output))
 
 
 def test_mlx_tts_helper_passes_voice_clone_options(monkeypatch):
