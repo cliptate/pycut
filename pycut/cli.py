@@ -10,12 +10,22 @@ from pathlib import Path
 from typing import Dict
 
 import pycut.config as config
-from pycut.clipper import VideoClipper
 from pycut.tts import synthesize_text_to_wav
 from pycut.utils import normalize_hex_color
 from pycut.video_io import (
     _parse_output_formats, _expand_video_inputs,
 )
+
+VideoClipper = None
+
+
+def _get_video_clipper_class():
+    global VideoClipper
+    if VideoClipper is None:
+        from pycut.clipper import VideoClipper as clipper_cls
+
+        VideoClipper = clipper_cls
+    return VideoClipper
 
 
 def _resolve_default_asr_model(source_lang: str) -> str:
@@ -208,7 +218,8 @@ def _run_clip(argv: list[str]):
     resolved_asr_model = args.asr_model or _resolve_default_asr_model(args.source_lang)
     resolved_aligner_model = args.aligner_model or _resolve_default_aligner_model()
 
-    clipper = VideoClipper(
+    clipper_cls = _get_video_clipper_class()
+    clipper = clipper_cls(
         asr_model_path=resolved_asr_model,
         aligner_model_path=resolved_aligner_model,
         enable_align=args.enable_align,

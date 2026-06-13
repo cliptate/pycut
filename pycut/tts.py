@@ -21,10 +21,10 @@ def _write_wav(output_path: str, audio, sample_rate: int) -> str:
     return str(output)
 
 
-def _load_mlx_generate_audio():
-    from mlx_audio.tts.generate import generate_audio
+def _load_mlx_write_joined_audio():
+    from mlx_audio.tts.generate import write_joined_audio
 
-    return generate_audio
+    return write_joined_audio
 
 
 def _read_attr_or_mapping_value(source: object, name: str) -> object:
@@ -43,26 +43,6 @@ def _resolve_sample_rate(source: object) -> int | None:
         if candidate:
             return int(candidate)
     return None
-
-
-class _MLXModelWithSampleRate:
-    def __init__(self, model: object, sample_rate: int):
-        self._model = model
-        self.sample_rate = sample_rate
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._model, name)
-
-
-def _with_sample_rate(model: object) -> object:
-    if getattr(model, "sample_rate", None):
-        return model
-
-    sample_rate = _resolve_sample_rate(model)
-    if sample_rate is None:
-        return model
-
-    return _MLXModelWithSampleRate(model, sample_rate)
 
 
 class MLXTTSHelper:
@@ -120,10 +100,6 @@ class MLXTTSHelper:
                 text=text,
                 output_path=output_path,
                 kwargs=kwargs,
-                speed=speed,
-                lang_code=lang_code,
-                ref_audio=ref_audio,
-                ref_text=prompt_text,
             )
             if joined_output is not None:
                 return joined_output
@@ -136,17 +112,13 @@ class MLXTTSHelper:
         text: str,
         output_path: str,
         kwargs: dict[str, object],
-        speed: Optional[float],
-        lang_code: Optional[str],
-        ref_audio: Optional[str],
-        ref_text: Optional[str],
     ) -> str | None:
         output = Path(output_path)
         if not output.suffix:
             return None
 
         try:
-            generate_audio = _load_mlx_generate_audio()
+            write_joined_audio = _load_mlx_write_joined_audio()
         except (ImportError, OSError):
             return None
 
@@ -154,25 +126,24 @@ class MLXTTSHelper:
         if output.exists():
             output.unlink()
 
-        generate_kwargs = {
-            **kwargs,
-            "speed": speed if speed is not None else 1.0,
-            "lang_code": lang_code or "en",
-        }
-        try:
-            generate_audio(
-                text=text,
-                model=_with_sample_rate(self.model),
-                output_path=str(output.parent),
-                file_prefix=output.stem,
-                audio_format=output.suffix.lstrip("."),
-                join_audio=True,
-                play=False,
-                verbose=False,
-                **generate_kwargs,
-            )
-        except TypeError:
-            return None
+        audio_chunks = []
+        sample_rate = _resolve_sample_rate(self.model)
+        for result in self.model.generate(text, **kwargs):
+            audio_chunks.append(getattr(result, "audio", result))
+            sample_rate = getattr(result, "sample_rate", sample_rate)
+
+        if not audio_chunks:
+            raise RuntimeError("MLX TTS did not produce audio")
+        if sample_rate is None:
+            sample_rate = 24000
+
+        write_joined_audio(
+            str(output),
+            audio_chunks,
+            int(sample_rate),
+            output.suffix.lstrip("."),
+        )
+        audio_chunks.clear()
 
         if output.exists():
             print(f"💾 TTS audio saved to {output}")
