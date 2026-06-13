@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx<0.28",
-    "mlx-audio>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-audio>=0.4.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "numpy>=1.26",
     "py-googletrans>=4.0.0",
     "pyobjc-framework-naturallanguage>=12.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
