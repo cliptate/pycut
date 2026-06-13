@@ -788,6 +788,61 @@ def test_tts_cli_can_disable_join_audio(monkeypatch, tmp_path):
         assert seen_by_option[str(output)]["join_audio"] is False
 
 
+def test_tts_cli_passes_mlx_generation_controls(monkeypatch, tmp_path):
+    """pycut tts should expose MLX segmentation controls for long scripts."""
+    import pycut.cli as cli_module
+    import pycut.config as config
+
+    monkeypatch.setattr(config.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(config.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(config, "resolve_default_mlx_tts_model", lambda: config.DEFAULT_MLX_TTS_MODEL)
+
+    seen = {}
+
+    def fake_synthesize_text_to_wav(**kwargs):
+        seen.update(kwargs)
+        return kwargs["output_path"]
+
+    monkeypatch.setattr(cli_module, "synthesize_text_to_wav", fake_synthesize_text_to_wav)
+
+    output = tmp_path / "voice.wav"
+    result = cli_module.main([
+        "tts",
+        "--text",
+        "line 1\nline 2",
+        "--output",
+        str(output),
+        "--split-pattern",
+        "\\n",
+        "--max-tokens",
+        "4096",
+        "--verbose",
+    ])
+
+    assert result == {"tts": str(output)}
+    assert seen["split_pattern"] == "\n"
+    assert seen["max_tokens"] == 4096
+    assert seen["verbose"] is True
+
+    seen.clear()
+    output = tmp_path / "voice_alias.wav"
+    result = cli_module.main([
+        "tts",
+        "--text",
+        "line 1\nline 2",
+        "--output",
+        str(output),
+        "--split_pattern",
+        "\\n",
+        "--max_tokens",
+        "4096",
+    ])
+
+    assert result == {"tts": str(output)}
+    assert seen["split_pattern"] == "\n"
+    assert seen["max_tokens"] == 4096
+
+
 def test_tts_console_main_returns_zero_on_success(monkeypatch, tmp_path, capsys):
     """The console entry point should not pass a success result dict to sys.exit."""
     import pycut.cli as cli_module
@@ -955,6 +1010,39 @@ def test_mlx_tts_helper_uses_mlx_audio_join_audio(monkeypatch, tmp_path):
     assert len(seen["audio_chunks"]) == 2
     assert seen["sample_rate"] == 22050
     assert seen["audio_format"] == "wav"
+
+
+def test_mlx_tts_helper_passes_split_controls_to_joined_generation(monkeypatch, tmp_path):
+    """MLX joined generation should preserve explicit split and token controls."""
+    import pycut.tts as tts
+
+    output = tmp_path / "joined.wav"
+    seen = {}
+
+    class FakeModel:
+        def generate(self, text, **kwargs):
+            seen.update(kwargs)
+            yield types.SimpleNamespace(audio=b"audio", sample_rate=22050, segment_idx=0)
+            yield types.SimpleNamespace(audio=b"audio", sample_rate=22050, segment_idx=1)
+
+    def fake_write_joined_audio(file_name, audio_chunks, sample_rate, audio_format):
+        output.write_bytes(b"RIFF")
+
+    monkeypatch.setattr(tts.MLXTTSHelper, "load_model", lambda self: setattr(self, "model", FakeModel()))
+    monkeypatch.setattr(tts, "_load_mlx_write_joined_audio", lambda: fake_write_joined_audio)
+
+    helper = tts.MLXTTSHelper(model_path="fake")
+
+    assert helper.synthesize(
+        text="line 1\nline 2",
+        output_path=str(output),
+        split_pattern="\n",
+        max_tokens=4096,
+        verbose=True,
+    ) == str(output)
+    assert seen["split_pattern"] == "\n"
+    assert seen["max_tokens"] == 4096
+    assert seen["verbose"] is True
 
 
 def test_mlx_tts_helper_adds_sample_rate_for_mlx_audio_join_audio(monkeypatch, tmp_path):

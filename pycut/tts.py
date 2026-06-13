@@ -74,6 +74,9 @@ class MLXTTSHelper:
         voice: str = "Chelsie",
         lang_code: Optional[str] = None,
         speed: Optional[float] = None,
+        split_pattern: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        verbose: bool = False,
         reference_audio: Optional[str] = None,
         prompt_audio: Optional[str] = None,
         prompt_text: Optional[str] = None,
@@ -87,6 +90,12 @@ class MLXTTSHelper:
             kwargs["lang_code"] = lang_code
         if speed is not None:
             kwargs["speed"] = speed
+        if split_pattern is not None:
+            kwargs["split_pattern"] = split_pattern
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        if verbose:
+            kwargs["verbose"] = verbose
         if normalize:
             kwargs["normalize"] = normalize
         ref_audio = reference_audio or prompt_audio
@@ -127,15 +136,20 @@ class MLXTTSHelper:
             output.unlink()
 
         audio_chunks = []
+        segment_indexes = set()
         sample_rate = _resolve_sample_rate(self.model)
         for result in self.model.generate(text, **kwargs):
             audio_chunks.append(getattr(result, "audio", result))
             sample_rate = getattr(result, "sample_rate", sample_rate)
+            segment_idx = getattr(result, "segment_idx", None)
+            if segment_idx is not None:
+                segment_indexes.add(segment_idx)
 
         if not audio_chunks:
             raise RuntimeError("MLX TTS did not produce audio")
         if sample_rate is None:
             sample_rate = 24000
+        segment_count = len(segment_indexes) or len(audio_chunks)
 
         write_joined_audio(
             str(output),
@@ -146,6 +160,8 @@ class MLXTTSHelper:
         audio_chunks.clear()
 
         if output.exists():
+            if segment_count > 1:
+                print(f"Joined {segment_count} MLX TTS segments")
             print(f"💾 TTS audio saved to {output}")
             return str(output)
         raise RuntimeError(
@@ -222,6 +238,9 @@ class VoxCPMTTSHelper:
         reference_audio: Optional[str] = None,
         prompt_audio: Optional[str] = None,
         prompt_text: Optional[str] = None,
+        split_pattern: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        verbose: bool = False,
         cfg_value: float = 2.0,
         inference_timesteps: int = 10,
         normalize: bool = False,
@@ -259,6 +278,9 @@ def synthesize_text_to_wav(
     voice: str = "Chelsie",
     lang_code: Optional[str] = None,
     speed: Optional[float] = None,
+    split_pattern: Optional[str] = None,
+    max_tokens: Optional[int] = None,
+    verbose: bool = False,
     device: Optional[str] = None,
     reference_audio: Optional[str] = None,
     prompt_audio: Optional[str] = None,
@@ -275,6 +297,9 @@ def synthesize_text_to_wav(
         voice=voice,
         lang_code=lang_code,
         speed=speed,
+        split_pattern=split_pattern,
+        max_tokens=max_tokens,
+        verbose=verbose,
         reference_audio=reference_audio,
         prompt_audio=prompt_audio,
         prompt_text=prompt_text,

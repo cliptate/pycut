@@ -158,6 +158,20 @@ def _build_tts_parser() -> argparse.ArgumentParser:
     parser.add_argument("--voice", default="Chelsie", help="MLX voice name (default: Chelsie)")
     parser.add_argument("--lang-code", default=None, help="MLX language hint, e.g. English or Chinese")
     parser.add_argument("--speed", type=float, default=None, help="MLX speed control when supported")
+    parser.add_argument(
+        "--split-pattern",
+        "--split_pattern",
+        default=None,
+        help=r"MLX text split pattern for long scripts, e.g. \n for one segment per line",
+    )
+    parser.add_argument(
+        "--max-tokens",
+        "--max_tokens",
+        type=int,
+        default=None,
+        help="MLX max generation tokens per segment",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Enable backend generation progress output")
     parser.add_argument("--device", default=None, help="VoxCPM device override, e.g. cuda, cpu, mps")
     parser.add_argument("--reference-audio", default=None, help="Reference audio for voice cloning")
     parser.add_argument("--prompt-audio", default=None, help="Prompt/reference audio path")
@@ -173,6 +187,12 @@ def _build_tts_parser() -> argparse.ArgumentParser:
         help="Join MLX multi-segment output into one WAV (default: enabled)",
     )
     return parser
+
+
+def _decode_tts_split_pattern(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.replace(r"\n", "\n").replace(r"\t", "\t").replace(r"\r", "\r")
 
 
 def _run_tts(argv: list[str]):
@@ -194,6 +214,9 @@ def _run_tts(argv: list[str]):
         voice=args.voice,
         lang_code=args.lang_code,
         speed=args.speed,
+        split_pattern=_decode_tts_split_pattern(args.split_pattern),
+        max_tokens=args.max_tokens,
+        verbose=args.verbose,
         device=args.device,
         reference_audio=args.reference_audio,
         prompt_audio=args.prompt_audio,
