@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+
+<fcpxml version="1.14">
+    <resources>
+        <format id="r1" frameDuration="100/2500s" width="2160" height="3840" colorSpace="1-1-1 (Rec. 709)"/>
+        <media id="r2" name="未命名多机位片段" uid="21gRVZnqRZOx3nTZb2Mcag" modDate="2026-08-07 18:12:51 +0800">
+            <multicam format="r1" tcStart="0s" tcFormat="NDF">
+                <mc-angle name="video" angleID="cxAYST/ZRMik2LXilXTGDw">
+                    <clip offset="0s" name="video" duration="461824/12800s" format="r3" tcFormat="NDF">
+                        <video ref="r4" offset="0s" duration="461824/12800s">
+                            <audio ref="r4" lane="-1" offset="0s" duration="25977600/720000s" role="dialogue" srcCh="1, 2"/>
+                        </video>
+                    </clip>
+                </mc-angle>
+            </multicam>
+        </media>
+        <format id="r3" frameDuration="512/12800s" width="1080" height="1920" paspH="2560" paspV="2559" colorSpace="1-1-1 (Rec. 709)"/>
+        <asset id="r4" name="video" uid="9C85C158DDA89EFA91434D49F0374D53" start="0s" duration="54280/1000s" hasVideo="1" format="r3" hasAudio="1" videoSources="1" audioSources="1" audioChannels="2" audioRate="44100">
+            <media-rep kind="original-media" sig="9C85C158DDA89EFA91434D49F0374D53" src="file:///Users/pilot/Downloads/video.mp4">
+                <bookmark>Ym9vazwDAAAAAAUQQAAAAD9bJhSwTwOeR9jeZNscBPO5klomHpwWM83QbAvlaoWiAAAAAAAAAAAAAAAAAAAAAPgBAAAgAAAAAQIAAIpFkr5l91QHlA0ofFC3SIgysL6i1vcEUdngSOWKwLseBAAAAAMDAAAAGAAoBQAAAAEBAABVc2VycwAAAAUAAAABAQAAcGlsb3QAAAAJAAAAAQEAAERvd25sb2FkcwAAAAkAAAABAQAAdmlkZW8ubXA0AAAAEAAAAAEGAAA4AAAASAAAAFgAAABsAAAACAAAAAQDAABZQgAAAAAAAAgAAAAEAwAAMgYEAAAAAAAIAAAABAMAAGUGBAAAAAAACAAAAAQDAACiEZMAAAAAABAAAAABBgAAmAAAAKgAAAC4AAAAyAAAAAgAAAAABAAAQcgS7hZAjXEYAAAAAQIAAAEAAAAAAAAADwAAAAAAAAAAAAAAAAAAAAAAAAABBQAABAAAAAMDAAAIAAAABAAAAAMDAAACAAAACAAAAAQDAAACAAAAAAAAAAQAAAADAwAA9QEAAAgAAAABCQAAZmlsZTovLy8MAAAAAQEAAE1hY2ludG9zaCBIRAgAAAAEAwAAAACHETkAAAAIAAAAAAQAAEHIBPjUAAAAJAAAAAEBAAAxNTQyRjZENS1DNzNCLTQyMjctODFBRi1CQUJCQjkxRkNEODEYAAAAAQIAAIEAAAABAAAA7xMAAAEAAAAAAAAAAAAAAAEAAAABAQAALwAAAPwAAAD+////AQAAAAAAAAAUAAAABBAAAIAAAAAAAAAABRAAANgAAAAAAAAAEBAAAAABAAAAAAAAQBAAAPAAAAAAAAAAVBAAACgBAAAAAAAAVRAAADQBAAAAAAAAVhAAACABAAAAAAAAAiAAAOwBAAAAAAAABSAAAFwBAAAAAAAAECAAAGwBAAAAAAAAESAAAKABAAAAAAAAEiAAAIABAAAAAAAAEyAAAJABAAAAAAAAICAAAMwBAAAAAAAAMCAAACABAAAAAAAAAcAAAEABAAAAAAAAEcAAAEgAAAAAAAAAEsAAAFABAAAAAAAAENAAACwAAAAAAAAAhPAAAAQAAAAAAAAA</bookmark>
+            </media-rep>
+            <metadata>
+                <md key="com.apple.proapps.studio.rawToLogConversion" value="0"/>
+                <md key="com.apple.proapps.spotlight.kMDItemProfileName" value="HD (1-1-1)"/>
+                <md key="com.apple.proapps.studio.cameraISO" value="0"/>
+                <md key="com.apple.proapps.studio.cameraColorTemperature" value="0"/>
+                <md key="com.apple.proapps.spotlight.kMDItemCodecs">
+                    <array>
+                        <string>Lavc60.31.102 libx264</string>
+                        <string>MPEG-4 AAC</string>
+                    </array>
+                </md>
+                <md key="com.apple.proapps.mio.ingestDate" value="2026-08-07 15:41:51 +0800"/>
+            </metadata>
+        </asset>
+    </resources>
+    <library location="file:///Users/pilot/Movies/%E6%9C%AA%E5%91%BD%E5%90%8D.fcpbundle/">
+        <event name="2026-7-29" uid="27F99CF8-1458-4774-A93D-5059E777D23B">
+            <project name="未命名项目" uid="BE07C58D-664A-42AD-B94A-1943AD620D9D" modDate="2026-08-07 18:13:49 +0800">
+                <sequence format="r1" duration="461824/12800s" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">
+                    <spine>
+                        <mc-clip ref="r2" offset="0s" name="未命名多机位片段" duration="461824/12800s">
+                            <mc-source angleID="cxAYST/ZRMik2LXilXTGDw" srcEnable="all"/>
+                        </mc-clip>
+                    </spine>
+                </sequence>
+            </project>
+        </event>
+        <smart-collection name="项目" match="all">
+            <match-clip rule="is" type="project"/>
+        </smart-collection>
+        <smart-collection name="所有视频" match="any">
+            <match-media rule="is" type="videoOnly"/>
+            <match-media rule="is" type="videoWithAudio"/>
+        </smart-collection>
+        <smart-collection name="仅音频" match="all">
+            <match-media rule="is" type="audioOnly"/>
+        </smart-collection>
+        <smart-collection name="静止图像" match="all">
+            <match-media rule="is" type="stills"/>
+        </smart-collection>
+        <smart-collection name="个人收藏" match="all">
+            <match-ratings value="favorites"/>
+        </smart-collection>
+        <smart-collection name="缺少分析" match="all">
+            <match-analysis-type rule="isMissing" value="any"/>
+        </smart-collection>
+    </library>
+</fcpxml>

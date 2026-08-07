@@ -1,5 +1,6 @@
 import json
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 
 def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
@@ -244,3 +245,133 @@ def test_cli_can_keep_empty_transcript_ranges_in_fcpxml(tmp_path):
 
     clip = ET.parse(output_dir / "project.fcpxml").find(".//spine/asset-clip")
     assert (clip.attrib["start"], clip.attrib["duration"]) == ("0/25s", "25/25s")
+
+
+def test_cli_rough_cuts_multicam_bundle_without_flattening(tmp_path):
+    import pycut.cli as cli
+
+    source = Path(__file__).parent / "未命名项目-multi.fcpxmld"
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"start": 1, "end": 2, "text": "first angle edit"},
+                    {"start": 4, "end": 5, "text": "second angle edit"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = cli.main(
+        [
+            str(source),
+            "--transcript",
+            str(transcript),
+            "--orientation",
+            "portrait",
+            "--margin-left",
+            "0",
+            "--margin-right",
+            "0",
+            "-o",
+            str(tmp_path / "output"),
+        ]
+    )
+
+    root = ET.parse(result["fcpxml"]).getroot()
+    clips = root.findall("./library/event/project/sequence/spine/mc-clip")
+    assert (
+        root.attrib["version"],
+        root.find("./resources/media/multicam/mc-angle").attrib["angleID"],
+        root.find("./resources/media/multicam/mc-angle/clip/video").attrib["ref"],
+        [
+            (
+                clip.attrib["ref"],
+                clip.attrib["offset"],
+                clip.attrib["start"],
+                clip.attrib["duration"],
+                clip.find("mc-source").attrib["angleID"],
+                clip.find("title/text/text-style").text,
+            )
+            for clip in clips
+        ],
+    ) == (
+        "1.14",
+        "cxAYST/ZRMik2LXilXTGDw",
+        "r4",
+        [
+            ("r2", "0/25s", "25/25s", "25/25s", "cxAYST/ZRMik2LXilXTGDw", "first angle edit"),
+            ("r2", "25/25s", "100/25s", "25/25s", "cxAYST/ZRMik2LXilXTGDw", "second angle edit"),
+        ],
+    )
+
+
+def test_cli_rough_cuts_compound_clip_without_flattening(tmp_path):
+    import pycut.cli as cli
+
+    source = tmp_path / "compound.fcpxml"
+    source.write_text(
+        """<fcpxml version="1.14">
+<resources>
+  <format id="r1" frameDuration="1/25s" width="1080" height="1920"/>
+  <media id="r2" name="Compound Interview">
+    <sequence format="r1" duration="250/25s"><spine>
+      <asset-clip ref="r3" offset="0s" start="0s" duration="250/25s"/>
+    </spine></sequence>
+  </media>
+  <asset id="r3" name="Camera" start="0s" duration="250/25s" format="r1"/>
+</resources>
+<library><event name="Event"><project name="Compound Project">
+  <sequence format="r1" duration="250/25s"><spine>
+    <ref-clip ref="r2" offset="0s" start="0s" duration="250/25s" useAudioSubroles="1">
+      <audio-role-source role="dialogue.dialogue-1"/>
+    </ref-clip>
+  </spine></sequence>
+</project></event></library>
+</fcpxml>""",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(
+        json.dumps({"segments": [{"start": 1, "end": 2, "text": "compound edit"}]}),
+        encoding="utf-8",
+    )
+
+    result = cli.main(
+        [
+            str(source),
+            "--transcript",
+            str(transcript),
+            "--orientation",
+            "portrait",
+            "--margin-left",
+            "0",
+            "--margin-right",
+            "0",
+            "-o",
+            str(tmp_path / "output"),
+        ]
+    )
+
+    root = ET.parse(result["fcpxml"]).getroot()
+    compound = root.find("./resources/media[@id='r2']/sequence/spine/asset-clip")
+    clip = root.find("./library/event/project/sequence/spine/ref-clip")
+    assert (
+        compound.attrib["duration"],
+        clip.attrib["ref"],
+        clip.attrib["start"],
+        clip.attrib["duration"],
+        clip.find("audio-role-source").attrib["role"],
+        clip.find("title/text/text-style").text,
+        [child.tag for child in clip],
+    ) == (
+        "250/25s",
+        "r2",
+        "25/25s",
+        "25/25s",
+        "dialogue.dialogue-1",
+        "compound edit",
+        ["title", "audio-role-source"],
+    )

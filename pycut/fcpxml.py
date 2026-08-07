@@ -33,6 +33,7 @@ _TITLE_FOLLOWING_NAMES = {
     "analysis-marker",
     "hidden-clip-marker",
     "audio-channel-source",
+    "audio-role-source",
     "filter-video",
     "filter-video-mask",
     "filter-audio",
