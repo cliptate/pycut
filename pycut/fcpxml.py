@@ -20,7 +20,8 @@ from pycut.utils import (
     hex_color_to_fcpxml,
 )
 
-_TITLE_EFFECT_UID = ".../Titles.localized/Build In:Out.localized/Custom.localized/Custom.moti"
+_TITLE_EFFECT_NAME = "Subtitle"
+_TITLE_EFFECT_UID = ".../Titles.localized/Subtitles.localized/Subtitle.localized/Subtitle.moti"
 
 
 def get_video_info(
@@ -136,7 +137,7 @@ def rough_cut_fcpxml(
                 resources,
                 "effect",
                 id=title_effect_ref,
-                name="Title",
+                name=_TITLE_EFFECT_NAME,
                 uid=_TITLE_EFFECT_UID,
             )
 
@@ -385,7 +386,7 @@ def generate_fcpxml(
         f' audioChannels="2" duration="{ft(video_src_dur_f)}">',
         f'      <media-rep kind="original-media" src="{escape(video_url, quote=True)}"/>',
         "    </asset>",
-        f'    <effect id="r3" name="Title" uid="{_TITLE_EFFECT_UID}"/>',
+        f'    <effect id="r3" name="{_TITLE_EFFECT_NAME}" uid="{_TITLE_EFFECT_UID}"/>',
         "  </resources>",
         "  <library>",
         f'    <event name="{escape(export_timestamp, quote=True)}">',

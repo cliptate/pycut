@@ -95,7 +95,10 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
         [(clip.attrib["offset"], clip.attrib["start"], clip.attrib["duration"]) for clip in clips],
         ["".join(run.text or "" for run in title.findall("./text/text-style")) for title in titles],
         [(title.attrib["ref"], title.attrib["offset"], title.attrib["duration"]) for title in titles],
-        [(effect.attrib["id"], effect.attrib["name"]) for effect in root.findall("./resources/effect")],
+        [
+            (effect.attrib["id"], effect.attrib["name"], effect.attrib["uid"])
+            for effect in root.findall("./resources/effect")
+        ],
         [clip.find("filter-video").attrib["ref"] for clip in clips],
         [clip.find("adjust-transform").attrib["position"] for clip in clips],
         root.find('.//project/metadata/md[@key="com.example.note"]').attrib["value"],
@@ -108,7 +111,14 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
         ],
         ["first\ntr:first", "second\ntr:second"],
         [("r4", "25/25s", "25/25s"), ("r4", "100/25s", "25/25s")],
-        [("r3", "Existing Effect"), ("r4", "Title")],
+        [
+            ("r3", "Existing Effect", "existing-effect"),
+            (
+                "r4",
+                "Subtitle",
+                ".../Titles.localized/Subtitles.localized/Subtitle.localized/Subtitle.moti",
+            ),
+        ],
         ["r3", "r3"],
         ["10 20", "10 20"],
         "keep me",
