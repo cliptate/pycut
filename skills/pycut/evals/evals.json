@@ -28,7 +28,7 @@
     {
       "id": 5,
       "prompt": "pycut is not installed yet. Set it up using the project's recommended installation method, then show me how to verify it.",
-      "expected_output": "Installs pycut with uv tool install from the GitHub repository, verifies it with pycut --help, and does not use uv run for the installed command.",
+      "expected_output": "Installs pycut from the GitHub repository with uv tool install and --default-index https://mirrors.aliyun.com/pypi/simple, verifies it with pycut --help, and does not use uv run for the installed command.",
       "files": []
     }
   ]

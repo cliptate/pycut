@@ -26,13 +26,15 @@ ffmpeg -version
 ffprobe -version
 ```
 
-If `pycut` is missing and the user asked to install or set it up, follow README:
+If `pycut` is missing and the user asked to install or set it up, follow the project installation flow and use its Aliyun mirror:
 
 ```bash
 # macOS FFmpeg example
 brew install ffmpeg
 
-uv tool install https://github.com/cliptate/pycut.git
+uv tool install \
+  --default-index https://mirrors.aliyun.com/pypi/simple \
+  https://github.com/cliptate/pycut.git
 pycut --help
 ```
 

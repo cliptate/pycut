@@ -24,6 +24,7 @@ class WorkflowAdapters:
     generate_ass_subtitle: Callable[..., str]
     generate_fcpxml: Callable[..., str]
     render_video_with_subtitles_complex: Callable[..., str]
+    detect_language: Optional[Callable[[str], tuple[str, float]]] = None
 
 
 class MediaJobWorkflow:
@@ -54,6 +55,11 @@ class MediaJobWorkflow:
         else:
             audio_path = os.path.join(tmpdir, "audio.wav")
             self.adapters.extract_audio(job.video_path, audio_path)
+            if not job.source_lang:
+                if self.adapters.detect_language is None:
+                    raise RuntimeError("Source language is required when automatic detection is unavailable")
+                job.source_lang, confidence = self.adapters.detect_language(audio_path)
+                print(f"🌐 Detected source language: {job.source_lang} ({confidence:.1%})")
             try:
                 segments = self.adapters.transcribe_audio(
                     audio_path,
@@ -67,6 +73,8 @@ class MediaJobWorkflow:
             print(f"💾 Transcription saved to {transcript_path}")
             return segments, transcript_metadata, transcript_path
 
+        if not job.source_lang:
+            job.source_lang = "auto"
         return transcript_document.segments, transcript_document.metadata, transcript_path
 
     def _write_txt(self, timeline: TranscriptTimeline) -> tuple[str, str]:

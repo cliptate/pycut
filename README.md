@@ -9,6 +9,7 @@
 ## Features
 
 - Local ASR selected by system: MLX on Apple Silicon, Qwen3-ASR on Linux/Windows
+- Automatic ECAPA-TDNN spoken-language detection on Apple Silicon when `--source-lang` is omitted
 - Separate `pycut tts` command for WAV speech generation
 - Translation and bilingual subtitle layouts
 - Multiple export targets: `srt`, `ass`, `fcpxml`, `video`, `txt`, `json`
@@ -58,6 +59,10 @@ Generate subtitles and reusable transcript JSON:
 ```bash
 pycut my_video.mp4 --source-lang en --format srt,json
 ```
+
+On Apple Silicon, omit `--source-lang` to detect the spoken language with
+`beshkenadze/lang-id-voxlingua107-ecapa-mlx`. Linux and Windows require an
+explicit `--source-lang` because MLX language detection is unavailable there.
 
 Create bilingual subtitles:
 
@@ -149,7 +154,7 @@ Supported media extensions:
 | Option | Default | Description |
 | --- | --- | --- |
 | `--translate` | off | Translate subtitles |
-| `--source-lang` | `en` | Source language code |
+| `--source-lang` | auto on Apple Silicon | Source language code; required on Linux/Windows |
 | `--target-lang` | `en` | Target language code |
 | `--subtitle-position` | `translated-top` | Bilingual subtitle stacking |
 | `--original-subtitle-color` | `#FFFFFF` | Original subtitle color |

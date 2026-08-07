@@ -18,6 +18,7 @@ import pycut.fcpxml as fcpxml_mod
 import pycut.renderer as renderer_mod
 import pycut.subtitle as subtitle_mod
 from pycut.asr import MLXASRHelper, QwenASRHelper
+from pycut.language import detect_language as detect_spoken_language
 from pycut.media_job import MediaJob
 from pycut.media_workflow import MediaJobWorkflow, WorkflowAdapters
 from pycut.timeline import (
@@ -54,6 +55,7 @@ class VideoClipper:
         runtime_profile = config.current_runtime_profile()
         self.runtime_profile = runtime_profile
         self.asr_backend = runtime_profile.asr_backend
+        self._asr_model_explicit = asr_model_path is not None
         default_asr_model = runtime_profile.default_asr_model("en")
         default_aligner_model = runtime_profile.default_aligner_model()
         self.asr_model_path = asr_model_path or default_asr_model
@@ -120,6 +122,9 @@ class VideoClipper:
     def extract_audio(self, video_path: str, output_path: str) -> str:
         """Extract audio from video as WAV 16kHz mono."""
         return extract_audio(video_path, output_path)
+
+    def detect_language(self, audio_path: str) -> tuple[str, float]:
+        return detect_spoken_language(audio_path)
 
     def _select_video_encoder(self) -> str:
         return renderer_mod.select_video_encoder()
@@ -206,6 +211,19 @@ class VideoClipper:
     def transcribe_audio(self, audio_path: str, orientation: str = "landscape", source_lang: str = "en") -> List[Segment]:
         """Transcribe audio file with word-level timestamps."""
         print(f"🎤 Transcribing {audio_path}...")
+
+        if not getattr(self, "_asr_model_explicit", True):
+            asr_model_path = self.runtime_profile.default_asr_model(source_lang)
+            if asr_model_path != self.asr_model_path:
+                self._unload_asr_model()
+                self.asr_model_path = asr_model_path
+                helper_cls = MLXASRHelper if self.asr_backend == "mlx" else QwenASRHelper
+                self.asr_helper = helper_cls(
+                    asr_model_path=self.asr_model_path,
+                    aligner_model_path=self.aligner_model_path,
+                    filter_fillers=self.filter_fillers,
+                    enable_align=self.enable_align,
+                )
         
         max_chars = self.max_chars
         print(f"  Using max_chars={max_chars} for {orientation} mode")
@@ -326,7 +344,7 @@ class VideoClipper:
         video_path: str,
         output_dir: str,
         translate: bool = False,
-        source_lang: str = "en",
+        source_lang: Optional[str] = "en",
         target_lang: str = "en",
         orientation: str = "landscape",
         subtitle_position: str = "original-top",
@@ -369,6 +387,7 @@ class VideoClipper:
         )
         adapters = WorkflowAdapters(
             extract_audio=self.extract_audio,
+            detect_language=self.detect_language,
             transcribe_audio=self.transcribe_audio,
             unload_asr_model=self._unload_asr_model,
             generate_ass_subtitle=self.generate_ass_subtitle,

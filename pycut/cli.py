@@ -104,7 +104,11 @@ def _build_clip_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-duration", type=float, default=30.0, help="Maximum subtitle segment duration in seconds (default: 30.0)")
     parser.add_argument("--max-chars", type=int, default=30, help="Maximum characters per subtitle segment (default: 30)")
     parser.add_argument("--translate", action="store_true", help="Translate subtitles")
-    parser.add_argument("--source-lang", default="en", help="Source language code (default: en)")
+    parser.add_argument(
+        "--source-lang",
+        default=None,
+        help="Source language code (default: detect automatically on macOS Apple Silicon)",
+    )
     parser.add_argument("--target-lang", default="en", help="Target language code (default: en)")
     parser.add_argument("--orientation", choices=["landscape", "portrait"], default="landscape", help="Video orientation (default: landscape)")
     parser.add_argument("--subtitle-position", choices=["original-top", "translated-top"], default="translated-top", help="Subtitle position: original-top (original above translated) or translated-top (default: translated-top)")
@@ -259,7 +263,9 @@ def _run_clip(argv: list[str]):
         parser.error(str(exc))
 
     # Initialize clipper
-    resolved_asr_model = args.asr_model or _resolve_default_asr_model(args.source_lang)
+    resolved_asr_model = args.asr_model
+    if resolved_asr_model is None and args.source_lang:
+        resolved_asr_model = _resolve_default_asr_model(args.source_lang)
     resolved_aligner_model = args.aligner_model or _resolve_default_aligner_model()
 
     clipper_cls = _get_video_clipper_class()

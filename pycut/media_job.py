@@ -17,7 +17,7 @@ class MediaJob:
     video_path: str
     output_dir: str
     translate: bool = False
-    source_lang: str = "en"
+    source_lang: Optional[str] = "en"
     target_lang: str = "en"
     orientation: str = "landscape"
     subtitle_position: str = "original-top"

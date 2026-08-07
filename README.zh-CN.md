@@ -57,6 +57,10 @@ uv run pycut --help
 pycut my_video.mp4 --source-lang en --format srt,json
 ```
 
+在 Apple Silicon 上可省略 `--source-lang`，此时使用
+`beshkenadze/lang-id-voxlingua107-ecapa-mlx` 自动检测语音语言。Linux 和
+Windows 不支持 MLX 语言检测，必须显式指定 `--source-lang`。
+
 生成双语字幕：
 
 ```bash
@@ -111,7 +115,7 @@ pycut video.mp4 \
 | `--no-align` | 关闭 | 跳过强制时间对齐，使用分段级时间戳 |
 | `--segment-duration` | `300` | 长媒体转录分块时长，单位秒 |
 | `--translate` | 关闭 | 启用字幕翻译 |
-| `--source-lang` | `en` | 源语言 |
+| `--source-lang` | Apple Silicon 自动检测 | 源语言；Linux/Windows 必填 |
 | `--target-lang` | `en` | 目标语言 |
 | `--subtitle-position` | `translated-top` | 双语字幕上下位置 |
 | `--original-subtitle-color` | `#FFFFFF` | 原文字幕颜色 |
