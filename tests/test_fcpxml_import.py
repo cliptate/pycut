@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import types
 import xml.etree.ElementTree as ET
@@ -92,9 +93,9 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
     root = ET.parse(output).getroot()
     clips = root.findall(".//spine/asset-clip")
     titles = root.findall(".//spine/asset-clip/title")
+    assert re.fullmatch(r"Rough Cut \d{8}-\d{6}", root.find(".//project").attrib["name"])
     assert (
         result["fcpxml"],
-        root.find(".//project").attrib["name"],
         [(clip.attrib["offset"], clip.attrib["start"], clip.attrib["duration"]) for clip in clips],
         ["".join(run.text or "" for run in title.findall("./text/text-style")) for title in titles],
         [(title.attrib["ref"], title.attrib["offset"], title.attrib["duration"]) for title in titles],
@@ -107,7 +108,6 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
         root.find('.//project/metadata/md[@key="com.example.note"]').attrib["value"],
     ) == (
         str(output),
-        "Rough Cut",
         [
             ("0/25s", "25/25s", "25/25s"),
             ("25/25s", "100/25s", "25/25s"),
@@ -204,9 +204,10 @@ def test_cli_accepts_fcpxml_bundle(tmp_path):
     )
 
     output = output_dir / "Library.fcpxml"
-    assert (result["fcpxml"], ET.parse(output).find(".//project").attrib["name"]) == (
-        str(output),
-        "Bundle Project",
+    assert result["fcpxml"] == str(output)
+    assert re.fullmatch(
+        r"Bundle Project \d{8}-\d{6}",
+        ET.parse(output).find(".//project").attrib["name"],
     )
 
 

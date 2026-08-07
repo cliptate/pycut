@@ -265,6 +265,9 @@ def rough_cut_fcpxml(
     if not spines:
         raise RuntimeError("FCPXML document has no project story spine")
     spine = spines[0]
+    project = spine.getparent().getparent()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    project.set("name", f"{(project.get('name') or '').strip()} {timestamp}".strip())
     story = list(spine)
     if not story:
         raise RuntimeError("FCPXML story spine is empty")

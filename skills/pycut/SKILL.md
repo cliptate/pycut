@@ -116,7 +116,8 @@ pycut interview.fcpxmld \
 Treat `.fcpxmld` as an FCPXML bundle containing `Info.fcpxml`; do not confuse it
 with the native Final Cut Pro `.fcpbundle` library. The output is a standalone
 `.fcpxml` that preserves existing resources, effects, clip settings, and project
-metadata while adding transcript titles and requested translations. Preserve
+metadata while adding transcript titles and requested translations. Expect the
+output project name to append a `YYYYMMDD-HHMMSS` generation timestamp. Preserve
 `asset-clip`, `mc-clip`, and compound `ref-clip` structures; do not flatten
 multicam or compound media. Empty transcript ranges are removed by default; add
 `--no-filter-empty-segments` only when the user asks to retain them.

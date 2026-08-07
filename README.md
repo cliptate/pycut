@@ -118,8 +118,9 @@ timestamps must align with the primary project story timeline. By default, empty
 transcript ranges are removed; pass `--no-filter-empty-segments` to retain them.
 Existing resources, effects, clip settings, and project metadata are preserved;
 transcript titles (plus translations when requested) are added to the rough cut.
-The result is a standalone `.fcpxml` file. Native Final Cut Pro `.fcpbundle`
-libraries are not FCPXML input. `--diarize` resolves the selected linked media and
+The result is a standalone `.fcpxml` file whose project name includes a
+`YYYYMMDD-HHMMSS` generation timestamp. Native Final Cut Pro `.fcpbundle` libraries
+are not FCPXML input. `--diarize` resolves the selected linked media and
 extracts temporary audio automatically. For edited timelines, offline media, or a
 preferred timeline mix, pass aligned audio with `--diarization-audio`. By default,
 Sortformer speaker indexes map to the multicam angle order; repeat
