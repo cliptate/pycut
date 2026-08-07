@@ -6,6 +6,8 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import pytest
+
 
 from pycut.clipper import VideoClipper
 from pycut.timeline import TimelineCue, TranscriptTimeline
@@ -41,6 +43,38 @@ def test_generate_fcpxml_uses_source_filename_and_timestamped_event(tmp_path):
     content = output_path.read_text(encoding="utf-8")
     assert '<project name="demo_video">' in content
     assert re.search(r'<event name="\d{4}-\d{2}-\d{2}">', content)
+
+
+@pytest.mark.parametrize(
+    ("frame_rate", "frame_duration", "one_second"),
+    [
+        (23.976, "1001/24000s", "24024/24000s"),
+        (29.97, "1001/30000s", "30030/30000s"),
+    ],
+)
+def test_generate_fcpxml_preserves_ntsc_fractional_frame_rates(
+    tmp_path,
+    frame_rate,
+    frame_duration,
+    one_second,
+):
+    import pycut.fcpxml as fcpxml
+
+    output_path = tmp_path / "output.fcpxml"
+    fcpxml.generate_fcpxml(
+        video_path=str(tmp_path / "demo.mp4"),
+        timeline=_timeline_from_segments([Segment(start=0.0, end=1.0, text="hello")]),
+        output_path=str(output_path),
+        frame_rate=frame_rate,
+    )
+
+    root = ET.fromstring(output_path.read_text(encoding="utf-8"))
+    assert (
+        root.find(".//format").attrib["frameDuration"],
+        root.find(".//asset").attrib["duration"],
+        root.find(".//asset-clip").attrib["duration"],
+        root.find(".//title").attrib["duration"],
+    ) == (frame_duration, one_second, one_second, one_second)
 
 
 def test_cli_help_does_not_expose_fcpxml_project_name_option():

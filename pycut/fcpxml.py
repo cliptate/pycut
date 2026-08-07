@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import math
 import subprocess
+from fractions import Fraction
 from html import escape
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -35,11 +36,24 @@ def get_video_info(
     return width, height, duration
 
 
+def _fcpxml_frame_rate(frame_rate: float) -> Fraction:
+    if math.isclose(frame_rate, 23.976, rel_tol=0, abs_tol=0.001):
+        return Fraction(24000, 1001)
+    if math.isclose(frame_rate, 29.97, rel_tol=0, abs_tol=0.001):
+        return Fraction(30000, 1001)
+    return Fraction(str(frame_rate))
+
+
+def _frame_time(frames: int, frame_rate: int | Fraction) -> str:
+    rate = frame_rate if isinstance(frame_rate, Fraction) else Fraction(frame_rate)
+    return f"{frames * rate.denominator}/{rate.numerator}s"
+
+
 def build_fcpxml_timemap(
     start_f: int,
     timeline_dur_f: int,
     source_dur_f: int,
-    fps_int: int,
+    fps_int: int | Fraction,
 ) -> str:
     """Return an FCPXML ``<timeMap>`` element for constant-speed retiming.
 
@@ -52,8 +66,8 @@ def build_fcpxml_timemap(
     v1 = start_f + source_dur_f
     return (
         f"              <timeMap>\n"
-        f'                <timept time="{t0}/{fps_int}s" value="{t0}/{fps_int}s" interp="linear"/>\n'
-        f'                <timept time="{t1}/{fps_int}s" value="{v1}/{fps_int}s" interp="linear"/>\n'
+        f'                <timept time="{_frame_time(t0, fps_int)}" value="{_frame_time(t0, fps_int)}" interp="linear"/>\n'
+        f'                <timept time="{_frame_time(t1, fps_int)}" value="{_frame_time(v1, fps_int)}" interp="linear"/>\n'
         f"              </timeMap>"
     )
 
@@ -63,7 +77,7 @@ def _build_fcpxml_title_for_cue(
     translation: str,
     offset_frames: int,
     duration_frames: int,
-    fps_int: int,
+    fps_int: int | Fraction,
     style_id: int,
     orientation: str,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
@@ -85,8 +99,8 @@ def _build_fcpxml_title_for_cue(
     name_attr = (cue.text[:50] if cue.text else f"s{style_id}") or f"s{style_id}"
     lines = [
         f'              <title ref="r3" name="{xml_attr(name_attr)}" lane="1"'
-        f' offset="{offset_frames}/{fps_int}s"'
-        f' duration="{duration_frames}/{fps_int}s">',
+        f' offset="{_frame_time(offset_frames, fps_int)}"'
+        f' duration="{_frame_time(duration_frames, fps_int)}">',
         "                <text>",
         f'                  <text-style ref="ts{style_id}">{xml_text(cue.text)}</text-style>',
     ]
@@ -144,23 +158,24 @@ def generate_fcpxml(
     )
     if speed <= 0:
         raise ValueError("FCPXML speed must be greater than 0")
-    fps_int = int(frame_rate)
+    fps = _fcpxml_frame_rate(frame_rate)
+    effective_frame_rate = float(fps)
     timeline_speed = float(speed)
 
     def s2f(seconds: float) -> int:
-        return int(math.ceil(round(seconds * frame_rate, 9)))
+        return int(math.ceil(round(seconds * effective_frame_rate, 9)))
 
     def s2f_start(seconds: float) -> int:
-        return max(0, int(math.floor(round(seconds * frame_rate, 9))))
+        return max(0, int(math.floor(round(seconds * effective_frame_rate, 9))))
 
     def s2f_end(seconds: float) -> int:
-        return max(0, int(math.ceil(round(seconds * frame_rate, 9))))
+        return max(0, int(math.ceil(round(seconds * effective_frame_rate, 9))))
 
     def s2f_timeline(seconds: float) -> int:
-        return int(math.ceil(round(seconds * frame_rate / timeline_speed, 9)))
+        return int(math.ceil(round(seconds * effective_frame_rate / timeline_speed, 9)))
 
     def ft(n: int) -> str:
-        return f"{n}/{fps_int}s"
+        return _frame_time(n, fps)
 
     width, height = (1920, 1080) if orientation == "landscape" else (1080, 1920)
     active = [cue for cue in timeline.cues if str(cue.text or "").strip()]
@@ -194,11 +209,11 @@ def generate_fcpxml(
         "<!DOCTYPE fcpxml>",
         '<fcpxml version="1.11">',
         "  <resources>",
-        f'    <format id="r1" name="CustomFormat_{width}x{height}_{fps_int}fps"'
-        f' frameDuration="1/{fps_int}s" width="{width}" height="{height}"'
+        f'    <format id="r1" name="CustomFormat_{width}x{height}_{frame_rate:g}fps"'
+        f' frameDuration="{ft(1)}" width="{width}" height="{height}"'
         f' colorSpace="1-1-1 (Rec. 709)"/>',
         f'    <asset id="r2" name="{escape(video_name, quote=True)}"'
-        f' start="0/{fps_int}s" hasVideo="1" format="r1" hasAudio="1"'
+        f' start="{ft(0)}" hasVideo="1" format="r1" hasAudio="1"'
         f' audioChannels="2" duration="{ft(video_src_dur_f)}">',
         f'      <media-rep kind="original-media" src="{escape(video_url, quote=True)}"/>',
         "    </asset>",
@@ -229,14 +244,14 @@ def generate_fcpxml(
             f' name="{escape((cue.text[:40] or str(i)), quote=True)}" tcFormat="NDF">',
         ]
         if timeline_speed != 1.0:
-            clip_lines.append(build_fcpxml_timemap(start_f, dur_f, dur_f_src, fps_int))
+            clip_lines.append(build_fcpxml_timemap(start_f, dur_f, dur_f_src, fps))
         clip_lines += [
             _build_fcpxml_title_for_cue(
                 cue,
                 translation,
                 start_f,
                 dur_f,
-                fps_int,
+                fps,
                 style_id,
                 orientation,
                 original_subtitle_color=original_subtitle_color,
