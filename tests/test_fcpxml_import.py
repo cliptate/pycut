@@ -109,8 +109,13 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
             ("0/25s", "25/25s", "25/25s"),
             ("25/25s", "100/25s", "25/25s"),
         ],
-        ["first\ntr:first", "second\ntr:second"],
-        [("r4", "25/25s", "25/25s"), ("r4", "100/25s", "25/25s")],
+        ["first", "tr:first", "second", "tr:second"],
+        [
+            ("r4", "25/25s", "25/25s"),
+            ("r4", "25/25s", "25/25s"),
+            ("r4", "100/25s", "25/25s"),
+            ("r4", "100/25s", "25/25s"),
+        ],
         [
             ("r3", "Existing Effect", "existing-effect"),
             (
@@ -123,6 +128,10 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
         ["10 20", "10 20"],
         "keep me",
     )
+    assert [[child.tag for child in clip] for clip in clips] == [
+        ["adjust-transform", "title", "title", "filter-video"],
+        ["adjust-transform", "title", "title", "filter-video"],
+    ]
 
     styles = root.findall(".//spine/asset-clip/title/text-style-def/text-style")
     assert [style.attrib["fontColor"] for style in styles] == [
@@ -131,7 +140,29 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
         "0.0706 0.2039 0.3373 1",
         "0.6706 0.8039 0.9373 1",
     ]
-    assert [title.find("adjust-transform").attrib["position"] for title in titles] == ["0 -13", "0 -13"]
+    assert [style.attrib["fontSize"] for style in styles] == ["48", "48", "48", "48"]
+    assert [style.attrib["lineSpacing"] for style in styles] == ["22", "22", "22", "22"]
+    assert [title.attrib["lane"] for title in titles] == ["1", "2", "1", "2"]
+    assert [title.attrib["role"] for title in titles] == ["subtitles.subtitles-1"] * 4
+    assert [
+        [(param.attrib["name"], param.attrib["key"], param.attrib["value"]) for param in title.findall("param")]
+        for title in titles
+    ] == [
+        [
+            ("Font Size", "9999/3336674837/3336674846/5/3336674848/3", "48"),
+            ("Y Position Offset", "9999/3336678691/100/3337241559/2/100", "0.556301"),
+        ],
+        [
+            ("Font Size", "9999/3336674837/3336674846/5/3336674848/3", "48"),
+            ("Y Position Offset", "9999/3336678691/100/3337241559/2/100", "0.574049"),
+        ],
+    ] * 2
+    assert [title.find("adjust-transform") for title in titles] == [
+        None,
+        None,
+        None,
+        None,
+    ]
 
 
 def test_cli_accepts_fcpxml_bundle(tmp_path):

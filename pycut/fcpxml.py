@@ -22,6 +22,22 @@ from pycut.utils import (
 
 _TITLE_EFFECT_NAME = "Subtitle"
 _TITLE_EFFECT_UID = ".../Titles.localized/Subtitles.localized/Subtitle.localized/Subtitle.moti"
+_SUBTITLE_ROLE = "subtitles.subtitles-1"
+_FONT_SIZE_PARAMETER_KEY = "9999/3336674837/3336674846/5/3336674848/3"
+_Y_POSITION_PARAMETER_KEY = "9999/3336678691/100/3337241559/2/100"
+_TITLE_FOLLOWING_NAMES = {
+    "marker",
+    "chapter-marker",
+    "rating",
+    "keyword",
+    "analysis-marker",
+    "hidden-clip-marker",
+    "audio-channel-source",
+    "filter-video",
+    "filter-video-mask",
+    "filter-audio",
+    "metadata",
+}
 
 
 def get_video_info(
@@ -58,6 +74,15 @@ def _frame_time(frames: int, frame_rate: int | Fraction) -> str:
 def _parse_time(value: str | None) -> Fraction:
     raw = (value or "0s").removesuffix("s")
     return Fraction(raw)
+
+
+def _subtitle_rig_value(y_offset: float) -> str:
+    midpoint = 27.941176470588061
+    if y_offset >= midpoint:
+        value = 0.5 + 0.5 * (y_offset - midpoint) / (2000.0 - midpoint)
+    else:
+        value = 0.5 * (y_offset + 2000.0) / (midpoint + 2000.0)
+    return f"{value:.6f}"
 
 
 def _input_document_path(input_path: str) -> Path:
@@ -197,7 +222,18 @@ def rough_cut_fcpxml(
                     translation_subtitle_color=translation_subtitle_color,
                     effect_ref=title_effect_ref,
                 )
-                fragment.append(etree.fromstring(title_xml.encode("utf-8")))
+                wrapper = etree.fromstring(f"<titles>{title_xml}</titles>".encode("utf-8"))
+                insertion_index = next(
+                    (
+                        index
+                        for index, child in enumerate(fragment)
+                        if child.tag in _TITLE_FOLLOWING_NAMES
+                    ),
+                    len(fragment),
+                )
+                for title in wrapper:
+                    fragment.insert(insertion_index, title)
+                    insertion_index += 1
                 style_id += 1
             spine.append(fragment)
             output_frame += duration_frames
@@ -266,6 +302,49 @@ def _build_fcpxml_title_for_cue(
     original_color = hex_color_to_fcpxml(original_subtitle_color)
     translation_color = hex_color_to_fcpxml(translation_subtitle_color)
     name_attr = (cue.text[:50] if cue.text else f"s{style_id}") or f"s{style_id}"
+
+    if orientation == "portrait":
+        def portrait_title(
+            text: str,
+            color: str,
+            style_ref: str,
+            lane: int,
+            y_offset: int,
+            bold: bool,
+        ) -> List[str]:
+            # ponytail: fixed 1080x1920 typography until SubtitleTitleTypography.fitting is provided.
+            font_size = "48"
+            return [
+                f'              <title ref="{xml_attr(effect_ref)}" name="{xml_attr(text[:50])}" lane="{lane}"'
+                f' offset="{_frame_time(offset_frames, fps_int)}"'
+                f' duration="{_frame_time(duration_frames, fps_int)}" role="{_SUBTITLE_ROLE}">',
+                f'                <param name="Font Size" key="{_FONT_SIZE_PARAMETER_KEY}" value="{font_size}"/>',
+                f'                <param name="Y Position Offset" key="{_Y_POSITION_PARAMETER_KEY}"'
+                f' value="{_subtitle_rig_value(y_offset)}"/>',
+                "                <text>",
+                f'                  <text-style ref="{style_ref}">{xml_text(text)}</text-style>',
+                "                </text>",
+                f'                <text-style-def id="{style_ref}">',
+                f'                  <text-style font="Arial Unicode MS" fontSize="{font_size}"'
+                f' fontFace="Regular" fontColor="{color}" bold="{int(bold)}" italic="0"'
+                f' strokeColor="0 0 0 1" strokeWidth="-1"'
+                f' shadowColor="0 0 0 0.5" shadowOffset="2 315" alignment="center" lineSpacing="22"/>',
+                "                </text-style-def>",
+                "              </title>",
+            ]
+
+        lines = portrait_title(cue.text, original_color, f"ts{style_id}", 1, 250, True)
+        if translation:
+            lines += portrait_title(
+                translation,
+                translation_color,
+                f"ts{style_id}_t",
+                2,
+                320,
+                False,
+            )
+        return "\n".join(lines)
+
     lines = [
         f'              <title ref="{xml_attr(effect_ref)}" name="{xml_attr(name_attr)}" lane="1"'
         f' offset="{_frame_time(offset_frames, fps_int)}"'
