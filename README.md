@@ -1,5 +1,11 @@
 # pycut
 
+[![Tests](https://github.com/cliptate/pycut/actions/workflows/test.yml/badge.svg)](https://github.com/cliptate/pycut/actions/workflows/test.yml)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#requirements)
+[![uv](https://img.shields.io/badge/package%20manager-uv-DE5FE9)](https://docs.astral.sh/uv/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
+
 > Local video/audio transcription, subtitle, timeline, rendering, and speech tools.
 
 **Languages:** [English](README.md) | [中文](README.zh-CN.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
@@ -40,7 +46,9 @@ brew install ffmpeg
 Install `pycut`:
 
 ```bash
-uv tool install https://github.com/cliptate/pycut.git
+uv tool install \
+  --default-index https://mirrors.aliyun.com/pypi/simple \
+  https://github.com/cliptate/pycut.git
 ```
 
 For local development:
@@ -243,6 +251,19 @@ Default TTS models:
 | --- | --- | --- |
 | macOS Apple Silicon | MLX Audio | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` |
 | Linux / Windows | VoxCPM | `openbmb/VoxCPM2` |
+
+## Development and CI
+
+Run the same dependency and test commands used by CI:
+
+```bash
+uv sync --frozen --dev
+uv run --frozen pytest -q
+```
+
+The [GitHub Actions workflow](.github/workflows/test.yml) runs on every push and
+pull request with `macos-latest`, Python 3.12, read-only repository permissions,
+a 10-minute timeout, dependency caching, and the Aliyun PyPI mirror.
 
 ## Pipeline
 
