@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pycut"
+  short_description: "Run local transcription, subtitles, timelines, and TTS"
+  default_prompt: "Use $pycut to process local media or synthesize speech with the installed pycut command."
