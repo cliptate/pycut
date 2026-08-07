@@ -1,0 +1,27 @@
+name: Test FCPXML Python tools
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      UV_DEFAULT_INDEX: "https://mirrors.aliyun.com/pypi/simple"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v9
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --dev
+      - name: Run tests
+        run: uv run --frozen pytest -q
