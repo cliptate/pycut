@@ -9,11 +9,13 @@ from copy import deepcopy
 from fractions import Fraction
 from html import escape
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, List, Mapping, Optional, Sequence
+from urllib.parse import unquote, urlparse
 
 from lxml import etree
 
 import pycut.config as config
+from pycut.speaker import SpeakerTurn
 from pycut.timeline import TimelineCue, TranscriptTimeline
 from pycut.utils import (
     get_audio_duration as _get_audio_duration,
@@ -95,6 +97,143 @@ def _input_document_path(input_path: str) -> Path:
     return path
 
 
+def resolve_diarization_audio(input_path: str) -> str:
+    """Resolve the original audio media selected by the primary multicam story."""
+    source_path = _input_document_path(input_path)
+    parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    try:
+        root = etree.parse(str(source_path), parser).getroot()
+    except (OSError, etree.XMLSyntaxError) as exc:
+        raise RuntimeError(f"Invalid FCPXML document: {exc}") from exc
+
+    clips = root.xpath(".//project/sequence/spine/mc-clip")
+    # ponytail: infer only one time-aligned source; edited timelines need an explicit mix.
+    if len(clips) != 1 or _parse_time(clips[0].get("start")) != _parse_time(clips[0].get("offset")):
+        raise RuntimeError(
+            "Cannot infer diarization audio from an edited multicam timeline; "
+            "pass --diarization-audio"
+        )
+
+    paths: list[Path] = []
+    for clip in clips:
+        sources = [
+            source
+            for source in clip.findall("mc-source")
+            if source.get("srcEnable", "all") in {"all", "audio"}
+        ]
+        for source in sources:
+            angles = root.xpath(
+                "./resources/media[@id=$ref]/multicam/mc-angle[@angleID=$angle_id]",
+                ref=clip.get("ref"),
+                angle_id=source.get("angleID"),
+            )
+            for angle in angles:
+                refs = (
+                    angle.xpath(".//audio[@ref]/@ref")
+                    or angle.xpath(".//asset-clip[@ref]/@ref")
+                    or angle.xpath(".//video[@ref]/@ref")
+                )
+                for ref in refs:
+                    urls = root.xpath(
+                        "./resources/asset[@id=$ref]/media-rep[@kind='original-media']/@src",
+                        ref=ref,
+                    )
+                    for url in urls:
+                        parsed = urlparse(url)
+                        if parsed.scheme == "file" and parsed.netloc in {"", "localhost"}:
+                            paths.append(Path(unquote(parsed.path)))
+                        elif not parsed.scheme:
+                            paths.append(Path(url).expanduser())
+
+    unique_paths = list(dict.fromkeys(paths))
+    if len(unique_paths) != 1:
+        reason = "no linked audio media" if not unique_paths else "multiple linked audio media"
+        raise RuntimeError(
+            f"Cannot infer diarization audio: {reason}; pass --diarization-audio"
+        )
+    if not unique_paths[0].is_file():
+        raise RuntimeError(
+            f"Linked diarization audio not found: {unique_paths[0]}; pass --diarization-audio"
+        )
+    return str(unique_paths[0])
+
+
+def _dominant_speaker(
+    turns: Sequence[SpeakerTurn],
+    start: Fraction,
+    end: Fraction,
+) -> int | None:
+    overlaps = [
+        (min(end, Fraction(str(turn.end))) - max(start, Fraction(str(turn.start))), turn.speaker)
+        for turn in turns
+    ]
+    overlaps = [overlap for overlap in overlaps if overlap[0] > 0]
+    return max(overlaps, default=(Fraction(0), None), key=lambda item: item[0])[1]
+
+
+def _speaker_ranges(
+    turns: Sequence[SpeakerTurn],
+    start: Fraction,
+    end: Fraction,
+) -> list[tuple[Fraction, Fraction, int | None]]:
+    boundaries = {start, end}
+    for turn in turns:
+        turn_start = Fraction(str(turn.start))
+        turn_end = Fraction(str(turn.end))
+        if start < turn_start < end:
+            boundaries.add(turn_start)
+        if start < turn_end < end:
+            boundaries.add(turn_end)
+    ordered = sorted(boundaries)
+    return [
+        (range_start, range_end, _dominant_speaker(turns, range_start, range_end))
+        for range_start, range_end in zip(ordered, ordered[1:])
+    ]
+
+
+def _multicam_angle_id(
+    root: etree._Element,
+    clip: etree._Element,
+    speaker: int,
+    speaker_angle_map: Mapping[int, str],
+) -> str | None:
+    angles = root.xpath(
+        "./resources/media[@id=$ref]/multicam/mc-angle",
+        ref=clip.get("ref"),
+    )
+    if speaker in speaker_angle_map:
+        requested = speaker_angle_map[speaker]
+        matches = [angle for angle in angles if requested in {angle.get("angleID"), angle.get("name")}]
+        if not matches:
+            raise RuntimeError(f"Multicam angle not found for speaker {speaker}: {requested}")
+        return matches[0].get("angleID")
+    if not 0 <= speaker < len(angles):
+        raise RuntimeError(
+            f"Speaker {speaker} has no matching multicam angle; use --speaker-angle-map"
+        )
+    # ponytail: Sortformer labels are anonymous arrival-order indexes; explicit mapping handles other camera orders.
+    return angles[speaker].get("angleID")
+
+
+def _switch_multicam_video(fragment: etree._Element, angle_id: str) -> None:
+    sources = fragment.findall("mc-source")
+    video_source = next(
+        (source for source in sources if source.get("srcEnable", "all") in {"all", "video"}),
+        None,
+    )
+    if video_source is not None and video_source.get("angleID") == angle_id:
+        return
+    if video_source is not None and video_source.get("srcEnable", "all") == "all":
+        video_source.set("srcEnable", "audio")
+        index = fragment.index(video_source) + 1
+    elif video_source is not None:
+        video_source.set("angleID", angle_id)
+        return
+    else:
+        index = len(sources)
+    fragment.insert(index, etree.Element("mc-source", angleID=angle_id, srcEnable="video"))
+
+
 def rough_cut_fcpxml(
     input_path: str,
     timeline: TranscriptTimeline,
@@ -107,6 +246,8 @@ def rough_cut_fcpxml(
     translate_fn: Optional[Callable[[List[str], str, str], List[str]]] = None,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
+    speaker_turns: Sequence[SpeakerTurn] = (),
+    speaker_angle_map: Optional[Mapping[int, str]] = None,
 ) -> str:
     """Rewrite the primary story spine to contain only transcript cue ranges."""
     source_path = _input_document_path(input_path)
@@ -200,44 +341,54 @@ def rough_cut_fcpxml(
             keep_end = min(cue_end, element_end)
             if keep_end <= keep_start:
                 continue
-            source_start = _parse_time(element.get("start")) + (keep_start - element_start)
-            source_start_frame = start_frame(source_start)
-            duration_frames = end_frame(keep_end) - start_frame(keep_start)
-            if duration_frames <= 0:
-                continue
-            fragment = deepcopy(element)
-            fragment.set("offset", _frame_time(output_frame, frame_rate))
-            if element.tag != "transition":
-                fragment.set("start", _frame_time(source_start_frame, frame_rate))
-            fragment.set("duration", _frame_time(duration_frames, frame_rate))
-            if title_effect_ref and cue_has_text and element.tag != "transition":
-                title_xml = _build_fcpxml_title_for_cue(
-                    cue,
-                    translation,
-                    source_start_frame,
-                    duration_frames,
-                    frame_rate,
-                    style_id,
-                    orientation,
-                    original_subtitle_color=original_subtitle_color,
-                    translation_subtitle_color=translation_subtitle_color,
-                    effect_ref=title_effect_ref,
-                )
-                wrapper = etree.fromstring(f"<titles>{title_xml}</titles>".encode("utf-8"))
-                insertion_index = next(
-                    (
-                        index
-                        for index, child in enumerate(fragment)
-                        if child.tag in _TITLE_FOLLOWING_NAMES
-                    ),
-                    len(fragment),
-                )
-                for title in wrapper:
-                    fragment.insert(insertion_index, title)
-                    insertion_index += 1
-                style_id += 1
-            spine.append(fragment)
-            output_frame += duration_frames
+            edit_ranges = (
+                _speaker_ranges(speaker_turns, keep_start, keep_end)
+                if element.tag == "mc-clip" and speaker_turns
+                else [(keep_start, keep_end, None)]
+            )
+            for edit_start, edit_end, speaker in edit_ranges:
+                source_start = _parse_time(element.get("start")) + (edit_start - element_start)
+                source_start_frame = start_frame(source_start)
+                duration_frames = end_frame(edit_end) - start_frame(edit_start)
+                if duration_frames <= 0:
+                    continue
+                fragment = deepcopy(element)
+                fragment.set("offset", _frame_time(output_frame, frame_rate))
+                if element.tag != "transition":
+                    fragment.set("start", _frame_time(source_start_frame, frame_rate))
+                fragment.set("duration", _frame_time(duration_frames, frame_rate))
+                if speaker is not None:
+                    angle_id = _multicam_angle_id(root, fragment, speaker, speaker_angle_map or {})
+                    if angle_id:
+                        _switch_multicam_video(fragment, angle_id)
+                if title_effect_ref and cue_has_text and element.tag != "transition":
+                    title_xml = _build_fcpxml_title_for_cue(
+                        cue,
+                        translation,
+                        source_start_frame,
+                        duration_frames,
+                        frame_rate,
+                        style_id,
+                        orientation,
+                        original_subtitle_color=original_subtitle_color,
+                        translation_subtitle_color=translation_subtitle_color,
+                        effect_ref=title_effect_ref,
+                    )
+                    wrapper = etree.fromstring(f"<titles>{title_xml}</titles>".encode("utf-8"))
+                    insertion_index = next(
+                        (
+                            index
+                            for index, child in enumerate(fragment)
+                            if child.tag in _TITLE_FOLLOWING_NAMES
+                        ),
+                        len(fragment),
+                    )
+                    for title in wrapper:
+                        fragment.insert(insertion_index, title)
+                        insertion_index += 1
+                    style_id += 1
+                spine.append(fragment)
+                output_frame += duration_frames
 
     sequence.set("duration", _frame_time(output_frame, frame_rate))
     destination = Path(output_path)

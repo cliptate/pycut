@@ -55,6 +55,27 @@ def _parse_hex_color(value: str) -> str:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def _parse_probability(value: str) -> float:
+    probability = float(value)
+    if not 0 <= probability <= 1:
+        raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return probability
+
+
+def _parse_speaker_angle(value: str) -> tuple[int, str]:
+    speaker, separator, angle = value.partition("=")
+    speaker = speaker.strip().lower().removeprefix("speaker_")
+    if not separator or not angle.strip():
+        raise argparse.ArgumentTypeError("must use SPEAKER=ANGLE, for example 0=Close")
+    try:
+        speaker_index = int(speaker)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("speaker must be 0, 1, 2, or 3") from exc
+    if speaker_index not in range(4):
+        raise argparse.ArgumentTypeError("speaker must be 0, 1, 2, or 3")
+    return speaker_index, angle.strip()
+
+
 def _build_clip_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -146,6 +167,35 @@ def _build_clip_parser() -> argparse.ArgumentParser:
                         help="Frame rate for FCPXML export (default: 25.0)")
     parser.add_argument("--fcpxml-speed", type=float, default=1.0,
                         help="Timeline speed multiplier for FCPXML export (e.g. 1.1 = 1.1x) (default: 1.0)")
+    parser.add_argument(
+        "--diarize",
+        action="store_true",
+        help="Use Sortformer speaker diarization to switch multicam video angles",
+    )
+    parser.add_argument(
+        "--diarization-audio",
+        metavar="AUDIO_FILE",
+        help="Override the audio inferred from FCPXML for speaker diarization",
+    )
+    parser.add_argument(
+        "--diarization-model",
+        default=config.DEFAULT_SPEAKER_DIARIZATION_MODEL,
+        help=f"Sortformer model path (default: {config.DEFAULT_SPEAKER_DIARIZATION_MODEL})",
+    )
+    parser.add_argument(
+        "--diarization-threshold",
+        type=_parse_probability,
+        default=0.5,
+        help="Sortformer speaker activity threshold from 0 to 1 (default: 0.5)",
+    )
+    parser.add_argument(
+        "--speaker-angle-map",
+        action="append",
+        type=_parse_speaker_angle,
+        default=[],
+        metavar="SPEAKER=ANGLE",
+        help="Map a speaker index to an FCPXML angle name or ID; repeat for multiple speakers",
+    )
     return parser
 
 
@@ -289,6 +339,12 @@ def _run_clip(argv: list[str]):
 
     if args.transcript and len(input_videos) > 1:
         parser.error("--transcript can only be used with a single video input")
+    if args.diarize and (len(input_videos) != 1 or not _is_fcpxml_input(Path(input_videos[0]))):
+        parser.error("--diarize requires exactly one FCPXML input")
+    if args.speaker_angle_map and not args.diarize:
+        parser.error("--speaker-angle-map requires --diarize")
+    if args.diarization_audio and not args.diarize:
+        parser.error("--diarization-audio requires --diarize")
 
     all_results: Dict[str, Dict[str, str]] = {}
     for idx, video_path in enumerate(input_videos, start=1):
@@ -308,6 +364,11 @@ def _run_clip(argv: list[str]):
                 filter_empty_segments=args.filter_empty_segments,
                 margin_left=args.margin_left / 1000.0,
                 margin_right=args.margin_right / 1000.0,
+                enable_speaker_diarization=args.diarize,
+                diarization_audio_path=args.diarization_audio,
+                diarization_model_path=args.diarization_model,
+                diarization_threshold=args.diarization_threshold,
+                speaker_angle_map=dict(args.speaker_angle_map),
             )
             continue
         all_results[video_path] = clipper.process_video(

@@ -1,6 +1,6 @@
 ---
 name: pycut
-description: Run local pycut workflows for audio/video transcription, SRT or ASS subtitles, subtitle translation, FCPXML export, burned-in caption video rendering, transcript JSON reuse, batch media processing, and text-to-speech WAV generation. Use when a user asks to transcribe media, create or translate captions, export an editing timeline, render captions onto video, reuse a pycut transcript, process multiple local media files, or synthesize speech with pycut.
+description: Install and run local pycut workflows for audio/video transcription, SRT or ASS subtitles, translation, FCPXML export and rough-cut editing, transcript reuse, rendered caption videos, batch processing, and text-to-speech. Use when a user asks to process media with pycut, including .fcpxml or .fcpxmld story edits, compound or multicam preservation, Sortformer speaker-driven camera switching, subtitle insertion, or translated timelines.
 ---
 
 # Pycut
@@ -104,13 +104,35 @@ pycut project.fcpxml \
 pycut Library.fcpxmld \
   --transcript ./project_transcript.json \
   -o ./rough-cut
+
+pycut interview.fcpxmld \
+  --transcript ./interview_transcript.json \
+  --diarize \
+  --speaker-angle-map 0=Wide \
+  --speaker-angle-map 1=Close \
+  -o ./rough-cut
 ```
 
 Treat `.fcpxmld` as an FCPXML bundle containing `Info.fcpxml`; do not confuse it
 with the native Final Cut Pro `.fcpbundle` library. The output is a standalone
 `.fcpxml` that preserves existing resources, effects, clip settings, and project
-metadata while adding transcript titles and requested translations. Empty transcript ranges are removed by default; add
+metadata while adding transcript titles and requested translations. Preserve
+`asset-clip`, `mc-clip`, and compound `ref-clip` structures; do not flatten
+multicam or compound media. Empty transcript ranges are removed by default; add
 `--no-filter-empty-segments` only when the user asks to retain them.
+
+For speaker-driven multicam cutting on macOS Apple Silicon, use `--diarize` to
+resolve the selected linked media and extract temporary audio automatically. For
+edited timelines, offline media, or a preferred mix, add
+`--diarization-audio AUDIO_FILE` with timeline-aligned audio. Sortformer speaker
+indexes map to the document's multicam angle order unless
+`--speaker-angle-map SPEAKER=ANGLE` explicitly names an angle.
+Prefer explicit mappings when the angle names are known, and repeat the option for
+multiple speakers. Pycut splits at speaker boundaries, switches only video angles,
+and preserves the original multicam audio angle. Use `--diarization-threshold` to
+tune activity sensitivity and `--diarization-model` for a local model path. Do not
+claim more than four speakers or biometric speaker identity: Sortformer performs
+speaker diarization (who spoke when).
 
 ### Render Captioned Video
 

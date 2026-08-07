@@ -102,13 +102,29 @@ pycut Library.fcpxmld --transcript project_transcript.json -o ./rough-cut
 pycut project.fcpxml --transcript project_transcript.json --translate --source-lang en --target-lang zh -o ./rough-cut
 ```
 
+Drive multicam video cuts from Sortformer speaker turns on macOS Apple Silicon:
+
+```bash
+pycut interview.fcpxmld \
+  --transcript interview_transcript.json \
+  --diarize \
+  --speaker-angle-map 0=Wide \
+  --speaker-angle-map 1=Close \
+  -o ./rough-cut
+```
+
 For `.fcpxmld` bundles, pycut reads the root `Info.fcpxml` document. Transcript
 timestamps must align with the primary project story timeline. By default, empty
 transcript ranges are removed; pass `--no-filter-empty-segments` to retain them.
 Existing resources, effects, clip settings, and project metadata are preserved;
 transcript titles (plus translations when requested) are added to the rough cut.
 The result is a standalone `.fcpxml` file. Native Final Cut Pro `.fcpbundle`
-libraries are not FCPXML input.
+libraries are not FCPXML input. `--diarize` resolves the selected linked media and
+extracts temporary audio automatically. For edited timelines, offline media, or a
+preferred timeline mix, pass aligned audio with `--diarization-audio`. By default,
+Sortformer speaker indexes map to the multicam angle order; repeat
+`--speaker-angle-map` to map them to angle names or IDs explicitly. Only the video
+angle changes, so the original multicam audio remains continuous.
 
 Reuse an existing transcript and skip ASR:
 
@@ -190,6 +206,11 @@ Supported inputs:
 | `--orientation` | `landscape` | `landscape` or `portrait` output |
 | `--fcpxml-frame-rate` | `25.0` | FCPXML frame rate |
 | `--fcpxml-speed` | `1.0` | FCPXML timeline speed multiplier |
+| `--diarize` | off | Infer linked audio and use Sortformer to cut an FCPXML multicam clip (Apple Silicon only) |
+| `--diarization-audio AUDIO_FILE` | inferred | Override diarization input with timeline-aligned audio |
+| `--diarization-model` | `mlx-community/diar_sortformer_4spk-v1-fp16` | Sortformer model ID or local path |
+| `--diarization-threshold` | `0.5` | Speaker activity threshold from 0 to 1 |
+| `--speaker-angle-map SPEAKER=ANGLE` | arrival order | Map speaker `0`–`3` to an angle name or ID; repeat as needed |
 
 ## Output Formats
 

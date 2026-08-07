@@ -30,6 +30,18 @@
       "prompt": "pycut is not installed yet. Set it up using the project's recommended installation method, then show me how to verify it.",
       "expected_output": "Installs pycut from the GitHub repository with uv tool install and --default-index https://mirrors.aliyun.com/pypi/simple, verifies it with pycut --help, and does not use uv run for the installed command.",
       "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "用 interview.fcpxmld 和已对齐的 transcript.json 做粗剪，再根据 mix.wav 的说话人切换 Wide 和 Close 两个机位，声音不要跟着切。",
+      "expected_output": "Uses the installed pycut command directly with the FCPXML bundle, --transcript, --diarize as a flag, and repeated --speaker-angle-map values for Wide and Close. Explains that linked media audio is inferred automatically, Sortformer diarization is Apple-Silicon-only, video is cut at speaker boundaries, and the original multicam audio angle is preserved.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Rough-cut project.fcpxml from aligned.json, add translated subtitles, and keep its compound clips and existing effects intact.",
+      "expected_output": "Uses the installed pycut command directly with one FCPXML input, --transcript, --translate, source and target languages, and an output directory. States that the standalone output preserves compound ref-clip resources, effects, settings, and metadata while adding subtitles rather than flattening the timeline.",
+      "files": []
     }
   ]
 }

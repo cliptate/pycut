@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -375,3 +377,112 @@ def test_cli_rough_cuts_compound_clip_without_flattening(tmp_path):
         "compound edit",
         ["title", "audio-role-source"],
     )
+
+
+def test_cli_uses_sortformer_speakers_to_switch_multicam_video(tmp_path, monkeypatch):
+    import pycut.cli as cli
+    import pycut.config as config
+    import pycut.utils as utils
+
+    calls = {}
+
+    class FakeModel:
+        def generate(self, audio, **kwargs):
+            calls.update(audio=audio, **kwargs)
+            segments = [
+                types.SimpleNamespace(start=0, end=1, speaker=0),
+                types.SimpleNamespace(start=1, end=2, speaker=1),
+            ]
+            return types.SimpleNamespace(segments=segments)
+
+    def fake_load(model_path):
+        calls["model_path"] = model_path
+        return FakeModel()
+
+    vad = types.ModuleType("mlx_audio.vad")
+    vad.load = fake_load
+    mlx_audio = types.ModuleType("mlx_audio")
+    mlx_audio.__path__ = []
+    monkeypatch.setitem(sys.modules, "mlx_audio", mlx_audio)
+    monkeypatch.setitem(sys.modules, "mlx_audio.vad", vad)
+    monkeypatch.setattr(config, "is_macos_apple_silicon", lambda *args, **kwargs: True)
+
+    def fake_run(command, **_kwargs):
+        calls["extracted_from"] = command[2]
+        Path(command[-1]).touch()
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(utils.subprocess, "run", fake_run)
+
+    media = tmp_path / "interview.mov"
+    media.touch()
+    source = tmp_path / "multicam.fcpxml"
+    source.write_text(
+        f"""<fcpxml version="1.14"><resources>
+<format id="r1" frameDuration="1/25s"/>
+<media id="r2"><multicam format="r1">
+  <mc-angle name="Wide" angleID="angle-wide"><clip offset="0s" duration="100/25s">
+    <video ref="r3" duration="100/25s"><audio ref="r3" duration="100/25s"/></video>
+  </clip></mc-angle>
+  <mc-angle name="Close" angleID="angle-close"/>
+</multicam></media>
+<asset id="r3" duration="100/25s" hasVideo="1" hasAudio="1">
+  <media-rep kind="original-media" src="{media.as_uri()}"/>
+</asset>
+</resources><library><event><project><sequence format="r1" duration="100/25s"><spine>
+<mc-clip ref="r2" offset="0s" start="0s" duration="100/25s">
+  <mc-source angleID="angle-wide" srcEnable="all"/>
+</mc-clip>
+</spine></sequence></project></event></library></fcpxml>""",
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "transcript.json"
+    transcript.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {"start": 0, "end": 2, "text": "speaker change"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = cli.main(
+        [
+            str(source),
+            "--transcript",
+            str(transcript),
+            "--diarize",
+            "--diarization-threshold",
+            "0.42",
+            "--speaker-angle-map",
+            "0=Wide",
+            "--speaker-angle-map",
+            "1=Close",
+            "--margin-left",
+            "0",
+            "--margin-right",
+            "0",
+            "-o",
+            str(tmp_path / "output"),
+        ]
+    )
+
+    clips = ET.parse(result["fcpxml"]).findall(".//project/sequence/spine/mc-clip")
+    diarization_audio = calls.pop("audio")
+    assert Path(diarization_audio).name == "audio.wav"
+    assert calls == {
+        "model_path": config.DEFAULT_SPEAKER_DIARIZATION_MODEL,
+        "extracted_from": str(media),
+        "threshold": 0.42,
+        "min_duration": 0.25,
+        "merge_gap": 0.2,
+        "verbose": False,
+    }
+    assert [
+        [(source.attrib["angleID"], source.attrib["srcEnable"]) for source in clip.findall("mc-source")]
+        for clip in clips
+    ] == [
+        [("angle-wide", "all")],
+        [("angle-wide", "audio"), ("angle-close", "video")],
+    ]

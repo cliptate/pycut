@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -21,6 +22,7 @@ from pycut.asr import MLXASRHelper, QwenASRHelper
 from pycut.language import detect_language as detect_spoken_language
 from pycut.media_job import MediaJob
 from pycut.media_workflow import MediaJobWorkflow, WorkflowAdapters
+from pycut.speaker import diarize_speakers
 from pycut.timeline import (
     TranscriptTimeline,
     prepare_timeline,
@@ -35,6 +37,7 @@ from pycut.utils import (
     extract_audio,
     get_audio_duration,
 )
+from pycut.video_io import SUPPORTED_VIDEO_EXTENSIONS
 
 
 class VideoClipper:
@@ -355,6 +358,11 @@ class VideoClipper:
         filter_empty_segments: bool = True,
         margin_left: float = -0.15,
         margin_right: float = 0.15,
+        enable_speaker_diarization: bool = False,
+        diarization_audio_path: Optional[str] = None,
+        diarization_model_path: str = config.DEFAULT_SPEAKER_DIARIZATION_MODEL,
+        diarization_threshold: float = 0.5,
+        speaker_angle_map: Optional[dict[int, str]] = None,
     ) -> Dict[str, str]:
         """Rough-cut an FCPXML story timeline from transcript cue ranges."""
         if not transcript_json_path:
@@ -371,6 +379,24 @@ class VideoClipper:
             margin_left=margin_left,
             margin_right=margin_right,
         )
+        if enable_speaker_diarization:
+            audio_path = diarization_audio_path or fcpxml_mod.resolve_diarization_audio(input_path)
+            if Path(audio_path).suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    extracted_audio = self.extract_audio(audio_path, str(Path(tmpdir) / "audio.wav"))
+                    speaker_turns = diarize_speakers(
+                        extracted_audio,
+                        model_path=diarization_model_path,
+                        threshold=diarization_threshold,
+                    )
+            else:
+                speaker_turns = diarize_speakers(
+                    audio_path,
+                    model_path=diarization_model_path,
+                    threshold=diarization_threshold,
+                )
+        else:
+            speaker_turns = []
         output_path = str(Path(output_dir) / f"{stem}.fcpxml")
         fcpxml_mod.rough_cut_fcpxml(
             input_path,
@@ -383,6 +409,8 @@ class VideoClipper:
             translate_fn=self.translate_texts_bulk if translate else None,
             original_subtitle_color=original_subtitle_color,
             translation_subtitle_color=translation_subtitle_color,
+            speaker_turns=speaker_turns,
+            speaker_angle_map=speaker_angle_map,
         )
         return {"transcript": str(store.path), "fcpxml": output_path}
 
