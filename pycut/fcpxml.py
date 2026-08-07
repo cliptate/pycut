@@ -5,10 +5,13 @@ from __future__ import annotations
 import datetime
 import math
 import subprocess
+from copy import deepcopy
 from fractions import Fraction
 from html import escape
 from pathlib import Path
 from typing import Callable, List, Optional
+
+from lxml import etree
 
 import pycut.config as config
 from pycut.timeline import TimelineCue, TranscriptTimeline
@@ -47,6 +50,110 @@ def _fcpxml_frame_rate(frame_rate: float) -> Fraction:
 def _frame_time(frames: int, frame_rate: int | Fraction) -> str:
     rate = frame_rate if isinstance(frame_rate, Fraction) else Fraction(frame_rate)
     return f"{frames * rate.denominator}/{rate.numerator}s"
+
+
+def _parse_time(value: str | None) -> Fraction:
+    raw = (value or "0s").removesuffix("s")
+    return Fraction(raw)
+
+
+def _input_document_path(input_path: str) -> Path:
+    path = Path(input_path)
+    if path.suffix.lower() == ".fcpxmld":
+        path = path / "Info.fcpxml"
+    if not path.is_file():
+        raise RuntimeError(f"FCPXML document not found: {path}")
+    return path
+
+
+def rough_cut_fcpxml(
+    input_path: str,
+    timeline: TranscriptTimeline,
+    output_path: str,
+) -> str:
+    """Rewrite the primary story spine to contain only transcript cue ranges."""
+    source_path = _input_document_path(input_path)
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, remove_blank_text=True)
+    try:
+        tree = etree.parse(str(source_path), parser)
+    except (OSError, etree.XMLSyntaxError) as exc:
+        raise RuntimeError(f"Invalid FCPXML document: {exc}") from exc
+    root = tree.getroot()
+    if root.tag != "fcpxml":
+        raise RuntimeError(f"Expected an FCPXML document, got <{root.tag}>")
+
+    # ponytail: first project only; add project selection when multi-project imports are needed.
+    spines = root.xpath(".//project/sequence/spine")
+    if not spines:
+        raise RuntimeError("FCPXML document has no project story spine")
+    spine = spines[0]
+    story = list(spine)
+    if not story:
+        raise RuntimeError("FCPXML story spine is empty")
+
+    sequence = spine.getparent()
+    format_id = sequence.get("format")
+    formats = root.xpath(".//resources/format[@id=$format_id]", format_id=format_id) if format_id else []
+    frame_duration_value = formats[0].get("frameDuration") if formats else None
+    frame_duration = _parse_time(frame_duration_value or "1/25s")
+    if frame_duration <= 0:
+        raise RuntimeError("FCPXML frameDuration must be greater than zero")
+    frame_rate = 1 / frame_duration
+
+    def start_frame(seconds: Fraction) -> int:
+        frames = seconds * frame_rate
+        return frames.numerator // frames.denominator
+
+    def end_frame(seconds: Fraction) -> int:
+        frames = seconds * frame_rate
+        return -(-frames.numerator // frames.denominator)
+
+    story_ranges = []
+    fallback_offset = Fraction(0)
+    for element in story:
+        offset = _parse_time(element.get("offset")) if element.get("offset") else fallback_offset
+        duration = _parse_time(element.get("duration"))
+        story_ranges.append((element, offset, offset + duration))
+        fallback_offset = offset + duration
+
+    for element in story:
+        spine.remove(element)
+
+    output_frame = 0
+    for cue in timeline.cues:
+        cue_start = Fraction(str(cue.start))
+        cue_end = Fraction(str(cue.end))
+        for element, element_start, element_end in story_ranges:
+            keep_start = max(cue_start, element_start)
+            keep_end = min(cue_end, element_end)
+            if keep_end <= keep_start:
+                continue
+            source_start = _parse_time(element.get("start")) + (keep_start - element_start)
+            source_start_frame = start_frame(source_start)
+            duration_frames = end_frame(keep_end) - start_frame(keep_start)
+            if duration_frames <= 0:
+                continue
+            fragment = deepcopy(element)
+            fragment.set("offset", _frame_time(output_frame, frame_rate))
+            if element.tag != "transition":
+                fragment.set("start", _frame_time(source_start_frame, frame_rate))
+            fragment.set("duration", _frame_time(duration_frames, frame_rate))
+            spine.append(fragment)
+            output_frame += duration_frames
+
+    sequence.set("duration", _frame_time(output_frame, frame_rate))
+    destination = Path(output_path)
+    if destination.resolve() == source_path.resolve():
+        raise RuntimeError("FCPXML output path must not overwrite the input document")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tree.write(
+        str(destination),
+        encoding="UTF-8",
+        xml_declaration=True,
+        pretty_print=True,
+        doctype=tree.docinfo.doctype or None,
+    )
+    return str(destination)
 
 
 def build_fcpxml_timemap(

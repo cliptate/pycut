@@ -13,7 +13,7 @@ import pycut.config as config
 from pycut.tts import DEFAULT_MLX_TTS_STT_MODEL, synthesize_text_to_wav
 from pycut.utils import normalize_hex_color
 from pycut.video_io import (
-    _parse_output_formats, _expand_video_inputs,
+    _parse_output_formats, _expand_video_inputs, _is_fcpxml_input,
 )
 
 VideoClipper = None
@@ -66,7 +66,11 @@ def _build_clip_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("video_inputs", nargs="+", help="Video files, directories, or glob patterns")
+    parser.add_argument(
+        "video_inputs",
+        nargs="+",
+        help="Media files, .fcpxml documents, .fcpxmld bundles, directories, or glob patterns",
+    )
     parser.add_argument(
         "--transcript",
         default=None,
@@ -281,7 +285,7 @@ def _run_clip(argv: list[str]):
 
     input_videos = _expand_video_inputs(args.video_inputs)
     if not input_videos:
-        parser.error("No valid video files found in inputs")
+        parser.error("No supported media or FCPXML inputs found")
 
     if args.transcript and len(input_videos) > 1:
         parser.error("--transcript can only be used with a single video input")
@@ -290,6 +294,16 @@ def _run_clip(argv: list[str]):
     for idx, video_path in enumerate(input_videos, start=1):
         print(f"\n▶️  [{idx}/{len(input_videos)}] {video_path}")
         resolved_output_dir = _resolve_output_dir(video_path, args.output_dir)
+        if _is_fcpxml_input(Path(video_path)):
+            all_results[video_path] = clipper.process_fcpxml(
+                input_path=video_path,
+                output_dir=resolved_output_dir,
+                transcript_json_path=args.transcript,
+                filter_empty_segments=args.filter_empty_segments,
+                margin_left=args.margin_left / 1000.0,
+                margin_right=args.margin_right / 1000.0,
+            )
+            continue
         all_results[video_path] = clipper.process_video(
             video_path=video_path,
             output_dir=resolved_output_dir,

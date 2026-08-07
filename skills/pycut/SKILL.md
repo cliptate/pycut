@@ -87,6 +87,25 @@ pycut input.mp4 \
 
 Export the complete transcript timeline. Do not claim that pycut automatically selects highlights.
 
+### Rough-Cut an Existing FCPXML Story
+
+Use a transcript whose timestamps align with the primary project story timeline:
+
+```bash
+pycut project.fcpxml \
+  --transcript ./project_transcript.json \
+  -o ./rough-cut
+
+pycut Library.fcpxmld \
+  --transcript ./project_transcript.json \
+  -o ./rough-cut
+```
+
+Treat `.fcpxmld` as an FCPXML bundle containing `Info.fcpxml`; do not confuse it
+with the native Final Cut Pro `.fcpbundle` library. The output is a standalone
+`.fcpxml`. Empty transcript ranges are removed by default; add
+`--no-filter-empty-segments` only when the user asks to retain them.
+
 ### Render Captioned Video
 
 ```bash
@@ -109,7 +128,7 @@ pycut input.mp4 \
   -o ./output-v2
 ```
 
-Pass exactly one media input with `--transcript`. Accept both the current object-shaped transcript JSON and the legacy segment-list format.
+Pass exactly one input with `--transcript`. Accept both the current object-shaped transcript JSON and the legacy segment-list format.
 
 ### Process Multiple Inputs
 

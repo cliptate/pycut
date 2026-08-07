@@ -94,6 +94,19 @@ pycut my_video.mp4 \
   --fcpxml-frame-rate 30
 ```
 
+Rough-cut an existing Final Cut Pro story timeline from an aligned transcript:
+
+```bash
+pycut project.fcpxml --transcript project_transcript.json -o ./rough-cut
+pycut Library.fcpxmld --transcript project_transcript.json -o ./rough-cut
+```
+
+For `.fcpxmld` bundles, pycut reads the root `Info.fcpxml` document. Transcript
+timestamps must align with the primary project story timeline. By default, empty
+transcript ranges are removed; pass `--no-filter-empty-segments` to retain them.
+Resources and project metadata are preserved, and the result is a standalone
+`.fcpxml` file. Native Final Cut Pro `.fcpbundle` libraries are not FCPXML input.
+
 Reuse an existing transcript and skip ASR:
 
 ```bash
@@ -123,10 +136,11 @@ Input expansion supports:
 - A glob: `./recordings/*.mp4`
 - Multiple inputs: `a.mp4 b.mp4 c.mp4`
 
-Supported media extensions:
+Supported inputs:
 
 - Video: `mp4`, `mov`, `mkv`, `avi`, `m4v`, `webm`
 - Audio: `wav`, `mp3`, `m4a`, `aac`, `flac`, `ogg`
+- Final Cut Pro XML: `.fcpxml` document or `.fcpxmld` bundle
 
 ## Common Options
 
@@ -134,7 +148,7 @@ Supported media extensions:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `video_inputs` | required | Media files, directories, or glob patterns |
+| `video_inputs` | required | Media files, `.fcpxml` documents, `.fcpxmld` bundles, directories, or glob patterns |
 | `-o, --output-dir` | sibling folder named after the input stem | Output directory |
 | `--transcript JSON_FILE` | none | Reuse an existing transcript JSON and skip ASR |
 | `--format` | `srt` | Comma-separated output formats |

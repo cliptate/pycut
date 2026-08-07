@@ -49,18 +49,29 @@ def _is_media_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in SUPPORTED_MEDIA_EXTENSIONS
 
 
+def _is_fcpxml_input(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    return (path.is_file() and suffix == ".fcpxml") or (path.is_dir() and suffix == ".fcpxmld")
+
+
+def _is_supported_input(path: Path) -> bool:
+    return _is_media_file(path) or _is_fcpxml_input(path)
+
+
 def _expand_video_inputs(raw_inputs: Iterable[str]) -> List[str]:
     """Expand CLI inputs to concrete video files (supports dir, glob, and multi-file)."""
     resolved: List[str] = []
     for raw in raw_inputs:
         candidate = Path(raw).expanduser()
         matches: List[Path] = []
-        if candidate.is_dir():
+        if _is_fcpxml_input(candidate):
+            matches = [candidate]
+        elif candidate.is_dir():
             matches = sorted(
                 (p for p in candidate.rglob("*") if _is_media_file(p)),
                 key=lambda p: str(p).lower(),
             )
-        elif candidate.exists() and _is_media_file(candidate):
+        elif candidate.exists() and _is_supported_input(candidate):
             matches = [candidate]
         elif any(ch in raw for ch in "*?[]"):
             glob_pattern = str(candidate)
@@ -79,7 +90,7 @@ def _expand_video_inputs(raw_inputs: Iterable[str]) -> List[str]:
                         ),
                         key=lambda p: p.name.lower(),
                     )
-            matches = [p for p in matches if _is_media_file(p)]
+            matches = [p for p in matches if _is_supported_input(p)]
         resolved.extend(str(p.resolve()) for p in matches)
 
     deduped: List[str] = []

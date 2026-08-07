@@ -27,6 +27,7 @@ from pycut.timeline import (
     split_transcript_segments,
     timeline_to_segments,
 )
+from pycut.transcript_store import TranscriptStore
 from pycut.translation import GoogleTranslator
 from pycut.utils import (
     Segment,
@@ -338,6 +339,35 @@ class VideoClipper:
             original_subtitle_color=original_subtitle_color,
             translation_subtitle_color=translation_subtitle_color,
         )
+
+    def process_fcpxml(
+        self,
+        input_path: str,
+        output_dir: str,
+        *,
+        transcript_json_path: Optional[str],
+        filter_empty_segments: bool = True,
+        margin_left: float = -0.15,
+        margin_right: float = 0.15,
+    ) -> Dict[str, str]:
+        """Rough-cut an FCPXML story timeline from transcript cue ranges."""
+        if not transcript_json_path:
+            raise RuntimeError("FCPXML rough-cut input requires an aligned --transcript JSON file")
+
+        stem = Path(input_path).stem
+        store = TranscriptStore(output_dir, stem)
+        document = store.load_provided(transcript_json_path)
+        timeline = prepare_timeline(
+            document.segments,
+            title=document.metadata.title,
+            subtitle=document.metadata.subtitle,
+            filter_empty_segments=filter_empty_segments,
+            margin_left=margin_left,
+            margin_right=margin_right,
+        )
+        output_path = str(Path(output_dir) / f"{stem}.fcpxml")
+        fcpxml_mod.rough_cut_fcpxml(input_path, timeline, output_path)
+        return {"transcript": str(store.path), "fcpxml": output_path}
 
     def process_video(
         self,

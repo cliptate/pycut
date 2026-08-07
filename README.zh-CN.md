@@ -91,6 +91,18 @@ pycut my_video.mp4 \
   --fcpxml-frame-rate 30
 ```
 
+根据已有时间戳转录，对 Final Cut Pro 主故事时间线进行粗剪：
+
+```bash
+pycut project.fcpxml --transcript project_transcript.json -o ./rough-cut
+pycut Library.fcpxmld --transcript project_transcript.json -o ./rough-cut
+```
+
+对于 `.fcpxmld` bundle，pycut 会读取根目录的 `Info.fcpxml`。转录时间戳
+必须与第一个项目的主故事时间线对齐。默认移除文本为空的时间段；使用
+`--no-filter-empty-segments` 可保留。资源与项目元数据保持不变，输出为独立
+`.fcpxml` 文件。Final Cut Pro 原生 `.fcpbundle` 资料库不是 FCPXML 输入。
+
 复用已有转录并跳过 ASR：
 
 ```bash
