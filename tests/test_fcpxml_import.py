@@ -2,8 +2,22 @@ import json
 import xml.etree.ElementTree as ET
 
 
-def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path):
+def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path, monkeypatch):
     import pycut.cli as cli
+    import pycut.translation as translation
+
+    class FakeTranslator:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def translate(self, texts, src, dest):
+            assert (src, dest) == ("en", "zh")
+            return [type("Translation", (), {"text": f"tr:{text}"})() for text in texts]
+
+    monkeypatch.setattr(translation, "Translator", FakeTranslator)
 
     source = tmp_path / "project.fcpxml"
     source.write_text(
@@ -14,11 +28,16 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path):
     <asset id="r2" name="Interview" start="0/25s" duration="250/25s" format="r1">
       <media-rep kind="original-media" src="file:///tmp/interview.mov"/>
     </asset>
+    <effect id="r3" name="Existing Effect" uid="existing-effect"/>
   </resources>
   <library><event name="Event"><project name="Rough Cut">
     <sequence format="r1" duration="250/25s"><spine>
-      <asset-clip ref="r2" name="Interview" offset="0/25s" duration="250/25s"/>
+      <asset-clip ref="r2" name="Interview" offset="0/25s" duration="250/25s">
+        <adjust-transform position="10 20"/>
+        <filter-video ref="r3"/>
+      </asset-clip>
     </spine></sequence>
+    <metadata><md key="com.example.note" value="keep me"/></metadata>
   </project></event></library>
 </fcpxml>
 """,
@@ -46,6 +65,17 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path):
             str(transcript),
             "--format",
             "fcpxml",
+            "--translate",
+            "--source-lang",
+            "en",
+            "--target-lang",
+            "zh",
+            "--orientation",
+            "portrait",
+            "--original-subtitle-color",
+            "#123456",
+            "--translation-subtitle-color",
+            "#ABCDEF",
             "--margin-left",
             "0",
             "--margin-right",
@@ -58,10 +88,17 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path):
     output = output_dir / "project.fcpxml"
     root = ET.parse(output).getroot()
     clips = root.findall(".//spine/asset-clip")
+    titles = root.findall(".//spine/asset-clip/title")
     assert (
         result["fcpxml"],
         root.find(".//project").attrib["name"],
         [(clip.attrib["offset"], clip.attrib["start"], clip.attrib["duration"]) for clip in clips],
+        ["".join(run.text or "" for run in title.findall("./text/text-style")) for title in titles],
+        [(title.attrib["ref"], title.attrib["offset"], title.attrib["duration"]) for title in titles],
+        [(effect.attrib["id"], effect.attrib["name"]) for effect in root.findall("./resources/effect")],
+        [clip.find("filter-video").attrib["ref"] for clip in clips],
+        [clip.find("adjust-transform").attrib["position"] for clip in clips],
+        root.find('.//project/metadata/md[@key="com.example.note"]').attrib["value"],
     ) == (
         str(output),
         "Rough Cut",
@@ -69,7 +106,22 @@ def test_cli_rough_cuts_fcpxml_from_transcript(tmp_path):
             ("0/25s", "25/25s", "25/25s"),
             ("25/25s", "100/25s", "25/25s"),
         ],
+        ["first\ntr:first", "second\ntr:second"],
+        [("r4", "25/25s", "25/25s"), ("r4", "100/25s", "25/25s")],
+        [("r3", "Existing Effect"), ("r4", "Title")],
+        ["r3", "r3"],
+        ["10 20", "10 20"],
+        "keep me",
     )
+
+    styles = root.findall(".//spine/asset-clip/title/text-style-def/text-style")
+    assert [style.attrib["fontColor"] for style in styles] == [
+        "0.0706 0.2039 0.3373 1",
+        "0.6706 0.8039 0.9373 1",
+        "0.0706 0.2039 0.3373 1",
+        "0.6706 0.8039 0.9373 1",
+    ]
+    assert [title.find("adjust-transform").attrib["position"] for title in titles] == ["0 -13", "0 -13"]
 
 
 def test_cli_accepts_fcpxml_bundle(tmp_path):

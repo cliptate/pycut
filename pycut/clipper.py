@@ -346,6 +346,12 @@ class VideoClipper:
         output_dir: str,
         *,
         transcript_json_path: Optional[str],
+        translate: bool = False,
+        source_lang: Optional[str] = "en",
+        target_lang: str = "en",
+        orientation: str = "landscape",
+        original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
+        translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
         filter_empty_segments: bool = True,
         margin_left: float = -0.15,
         margin_right: float = 0.15,
@@ -366,7 +372,18 @@ class VideoClipper:
             margin_right=margin_right,
         )
         output_path = str(Path(output_dir) / f"{stem}.fcpxml")
-        fcpxml_mod.rough_cut_fcpxml(input_path, timeline, output_path)
+        fcpxml_mod.rough_cut_fcpxml(
+            input_path,
+            timeline,
+            output_path,
+            translate=translate,
+            source_lang=source_lang or "auto",
+            target_lang=target_lang,
+            orientation=orientation,
+            translate_fn=self.translate_texts_bulk if translate else None,
+            original_subtitle_color=original_subtitle_color,
+            translation_subtitle_color=translation_subtitle_color,
+        )
         return {"transcript": str(store.path), "fcpxml": output_path}
 
     def process_video(

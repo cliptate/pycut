@@ -99,13 +99,16 @@ Rough-cut an existing Final Cut Pro story timeline from an aligned transcript:
 ```bash
 pycut project.fcpxml --transcript project_transcript.json -o ./rough-cut
 pycut Library.fcpxmld --transcript project_transcript.json -o ./rough-cut
+pycut project.fcpxml --transcript project_transcript.json --translate --source-lang en --target-lang zh -o ./rough-cut
 ```
 
 For `.fcpxmld` bundles, pycut reads the root `Info.fcpxml` document. Transcript
 timestamps must align with the primary project story timeline. By default, empty
 transcript ranges are removed; pass `--no-filter-empty-segments` to retain them.
-Resources and project metadata are preserved, and the result is a standalone
-`.fcpxml` file. Native Final Cut Pro `.fcpbundle` libraries are not FCPXML input.
+Existing resources, effects, clip settings, and project metadata are preserved;
+transcript titles (plus translations when requested) are added to the rough cut.
+The result is a standalone `.fcpxml` file. Native Final Cut Pro `.fcpbundle`
+libraries are not FCPXML input.
 
 Reuse an existing transcript and skip ASR:
 

@@ -20,6 +20,8 @@ from pycut.utils import (
     hex_color_to_fcpxml,
 )
 
+_TITLE_EFFECT_UID = ".../Titles.localized/Build In:Out.localized/Custom.localized/Custom.moti"
+
 
 def get_video_info(
     video_path: str,
@@ -70,6 +72,14 @@ def rough_cut_fcpxml(
     input_path: str,
     timeline: TranscriptTimeline,
     output_path: str,
+    *,
+    translate: bool = False,
+    source_lang: str = "zh",
+    target_lang: str = "en",
+    orientation: str = "landscape",
+    translate_fn: Optional[Callable[[List[str], str, str], List[str]]] = None,
+    original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
+    translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
 ) -> str:
     """Rewrite the primary story spine to contain only transcript cue ranges."""
     source_path = _input_document_path(input_path)
@@ -100,6 +110,36 @@ def rough_cut_fcpxml(
         raise RuntimeError("FCPXML frameDuration must be greater than zero")
     frame_rate = 1 / frame_duration
 
+    active_cues = [cue for cue in timeline.cues if str(cue.text or "").strip()]
+    if translate and active_cues and translate_fn is not None:
+        print("🌍 Translating segments for FCPXML...")
+        raw = translate_fn([cue.text for cue in active_cues], source_lang, target_lang)
+        translations = raw if len(raw) == len(active_cues) else [""] * len(active_cues)
+    else:
+        translations = [""] * len(active_cues)
+    translation_index = 0
+    title_effect_ref = ""
+    if active_cues:
+        resources = root.find("resources")
+        if resources is None:
+            raise RuntimeError("FCPXML document has no resources")
+        effects = resources.xpath("./effect[@uid=$uid]", uid=_TITLE_EFFECT_UID)
+        if effects:
+            title_effect_ref = effects[0].get("id") or ""
+        else:
+            used_ids = {element.get("id") for element in root.xpath(".//*[@id]")}
+            resource_number = 1
+            while f"r{resource_number}" in used_ids:
+                resource_number += 1
+            title_effect_ref = f"r{resource_number}"
+            etree.SubElement(
+                resources,
+                "effect",
+                id=title_effect_ref,
+                name="Title",
+                uid=_TITLE_EFFECT_UID,
+            )
+
     def start_frame(seconds: Fraction) -> int:
         frames = seconds * frame_rate
         return frames.numerator // frames.denominator
@@ -120,7 +160,12 @@ def rough_cut_fcpxml(
         spine.remove(element)
 
     output_frame = 0
+    style_id = 1
     for cue in timeline.cues:
+        cue_has_text = bool(str(cue.text or "").strip())
+        translation = translations[translation_index] if cue_has_text else ""
+        if cue_has_text:
+            translation_index += 1
         cue_start = Fraction(str(cue.start))
         cue_end = Fraction(str(cue.end))
         for element, element_start, element_end in story_ranges:
@@ -138,6 +183,21 @@ def rough_cut_fcpxml(
             if element.tag != "transition":
                 fragment.set("start", _frame_time(source_start_frame, frame_rate))
             fragment.set("duration", _frame_time(duration_frames, frame_rate))
+            if title_effect_ref and cue_has_text and element.tag != "transition":
+                title_xml = _build_fcpxml_title_for_cue(
+                    cue,
+                    translation,
+                    source_start_frame,
+                    duration_frames,
+                    frame_rate,
+                    style_id,
+                    orientation,
+                    original_subtitle_color=original_subtitle_color,
+                    translation_subtitle_color=translation_subtitle_color,
+                    effect_ref=title_effect_ref,
+                )
+                fragment.append(etree.fromstring(title_xml.encode("utf-8")))
+                style_id += 1
             spine.append(fragment)
             output_frame += duration_frames
 
@@ -189,6 +249,7 @@ def _build_fcpxml_title_for_cue(
     orientation: str,
     original_subtitle_color: str = config.DEFAULT_ORIGINAL_SUBTITLE_COLOR,
     translation_subtitle_color: str = config.DEFAULT_TRANSLATION_SUBTITLE_COLOR,
+    effect_ref: str = "r3",
 ) -> str:
     """Return an FCPXML ``<title>`` element string for one transcript cue."""
 
@@ -205,7 +266,7 @@ def _build_fcpxml_title_for_cue(
     translation_color = hex_color_to_fcpxml(translation_subtitle_color)
     name_attr = (cue.text[:50] if cue.text else f"s{style_id}") or f"s{style_id}"
     lines = [
-        f'              <title ref="r3" name="{xml_attr(name_attr)}" lane="1"'
+        f'              <title ref="{xml_attr(effect_ref)}" name="{xml_attr(name_attr)}" lane="1"'
         f' offset="{_frame_time(offset_frames, fps_int)}"'
         f' duration="{_frame_time(duration_frames, fps_int)}">',
         "                <text>",
@@ -324,8 +385,7 @@ def generate_fcpxml(
         f' audioChannels="2" duration="{ft(video_src_dur_f)}">',
         f'      <media-rep kind="original-media" src="{escape(video_url, quote=True)}"/>',
         "    </asset>",
-        '    <effect id="r3" name="Title"'
-        ' uid=".../Titles.localized/Build In:Out.localized/Custom.localized/Custom.moti"/>',
+        f'    <effect id="r3" name="Title" uid="{_TITLE_EFFECT_UID}"/>',
         "  </resources>",
         "  <library>",
         f'    <event name="{escape(export_timestamp, quote=True)}">',

@@ -96,6 +96,11 @@ pycut project.fcpxml \
   --transcript ./project_transcript.json \
   -o ./rough-cut
 
+pycut project.fcpxml \
+  --transcript ./project_transcript.json \
+  --translate --source-lang en --target-lang zh \
+  -o ./rough-cut
+
 pycut Library.fcpxmld \
   --transcript ./project_transcript.json \
   -o ./rough-cut
@@ -103,7 +108,8 @@ pycut Library.fcpxmld \
 
 Treat `.fcpxmld` as an FCPXML bundle containing `Info.fcpxml`; do not confuse it
 with the native Final Cut Pro `.fcpbundle` library. The output is a standalone
-`.fcpxml`. Empty transcript ranges are removed by default; add
+`.fcpxml` that preserves existing resources, effects, clip settings, and project
+metadata while adding transcript titles and requested translations. Empty transcript ranges are removed by default; add
 `--no-filter-empty-segments` only when the user asks to retain them.
 
 ### Render Captioned Video
